@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Socket } from 'socket.io-client';
 import { GameBoard } from './GameBoard';
+import { Unit, Enemy, GameState, UNIT_CONFIG, ENEMY_CONFIG } from '../types/game';
 import './Game.css';
 
 interface Player {
@@ -16,11 +17,22 @@ interface GameProps {
 }
 
 export function Game({ socket, room, myPlayerId }: GameProps) {
-  const [gold, setGold] = useState(500);
-  const [baseHP, setBaseHP] = useState(100);
-  const [wave, setWave] = useState(1);
-  const [selectedUnit, setSelectedUnit] = useState<string | null>(null);
+  const [gameState, setGameState] = useState<GameState>({
+    gold: 500,
+    baseHP: 100,
+    wave: 1,
+    totalWaves: 10,
+    stage: 1,
+    units: [],
+    enemies: [],
+    status: 'playing'
+  });
   
+  const [selectedUnit, setSelectedUnit] = useState<string | null>(null);
+  const [pendingUnit, setPendingUnit] = useState<{ row: number; col: number; type: string } | null>(null);
+  const gameLoopRef = useRef<number>();
+  const lastUpdateRef = useRef<number>(Date.now());
+
   // 初始化5x15网格
   const [cells, setCells] = useState(() => {
     const initialCells = [];
@@ -29,14 +41,8 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
       for (let col = 0; col < 15; col++) {
         let type: 'empty' | 'base' | 'spawn' = 'empty';
         
-        // 最左边是基地
-        if (col === 0 && row === 2) {
-          type = 'base';
-        }
-        // 最右边是敌人出生点
-        if (col === 14) {
-          type = 'spawn';
-        }
+        if (col === 0 && row === 2) type = 'base';
+        if (col === 14) type = 'spawn';
         
         rowCells.push({ row, col, type, unit: null });
       }
@@ -45,62 +51,191 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
     return initialCells;
   });
 
-  const handleCellClick = (row: number, col: number) => {
-    console.log(`Clicked cell: ${row}, ${col}`);
+  // 游戏主循环
+  useEffect(() => {
+    const gameLoop = () => {
+      const now = Date.now();
+      const deltaTime = (now - lastUpdateRef.current) / 1000; // 秒
+      lastUpdateRef.current = now;
+
+      setGameState(prevState => {
+        if (prevState.status !== 'playing') return prevState;
+
+        let newState = { ...prevState };
+        
+        // 1. 农民生产金币
+        newState.units.forEach(unit => {
+          if (unit.type === 'worker' && unit.goldPerSecond) {
+            newState.gold += unit.goldPerSecond * deltaTime;
+          }
+        });
+
+        // 2. 敌人移动
+        newState.enemies = newState.enemies.map(enemy => ({
+          ...enemy,
+          progress: Math.min(1, enemy.progress + enemy.speed * deltaTime / 14)
+        }));
+
+        // 3. 检查敌人是否到达基地
+        const reachedEnemies = newState.enemies.filter(e => e.progress >= 1);
+        reachedEnemies.forEach(enemy => {
+          newState.baseHP -= enemy.damage;
+        });
+        newState.enemies = newState.enemies.filter(e => e.progress < 1);
+
+        // 4. 单位攻击
+        newState.units.forEach(unit => {
+          if (unit.attack > 0 && now - unit.lastAttackTime > unit.attackSpeed * 1000) {
+            // 查找范围内的敌人
+            const target = findNearestEnemy(unit, newState.enemies);
+            if (target) {
+              target.hp -= unit.attack;
+              unit.lastAttackTime = now;
+              
+              // 移除死亡的敌人
+              newState.enemies = newState.enemies.filter(e => e.hp > 0);
+            }
+          }
+        });
+
+        // 5. 检查基地血量
+        if (newState.baseHP <= 0) {
+          newState.status = 'defeat';
+        }
+
+        // 6. 检查是否清空所有敌人（波次结束）
+        if (newState.enemies.length === 0 && newState.status === 'playing') {
+          if (newState.wave >= newState.totalWaves) {
+            newState.status = 'victory';
+          } else {
+            // 暂时不自动开始下一波，等待实现
+          }
+        }
+
+        return newState;
+      });
+
+      gameLoopRef.current = requestAnimationFrame(gameLoop);
+    };
+
+    gameLoopRef.current = requestAnimationFrame(gameLoop);
+
+    return () => {
+      if (gameLoopRef.current) {
+        cancelAnimationFrame(gameLoopRef.current);
+      }
+    };
+  }, []);
+
+  // 生成敌人波次
+  const spawnWave = () => {
+    const newEnemies: Enemy[] = [];
+    const enemyCount = 5 + gameState.wave * 2;
     
-    // 如果选择了单位，尝试部署
-    if (selectedUnit) {
-      const cost = getUnitCost(selectedUnit);
+    for (let i = 0; i < enemyCount; i++) {
+      const type = Math.random() > 0.7 ? 'tank' : 'zombie';
+      const config = ENEMY_CONFIG[type];
+      const row = Math.floor(Math.random() * 5);
       
-      // 检查是否有足够金币
-      if (gold < cost) {
-        alert('金币不足！');
-        return;
-      }
-      
-      // 检查格子是否可用
-      if (cells[row][col].type !== 'empty' || cells[row][col].unit) {
-        alert('该格子不可用！');
-        return;
-      }
-      
-      // 部署单位
-      const newCells = [...cells];
-      newCells[row][col] = {
-        ...newCells[row][col],
-        unit: { type: selectedUnit, level: 1, hp: 100 }
-      };
-      setCells(newCells);
-      setGold(gold - cost);
-      setSelectedUnit(null);
-      
-      // TODO: 通知服务器
-      socket.emit('deploy-unit', { roomId: room.id, row, col, unitType: selectedUnit });
+      newEnemies.push({
+        id: `enemy-${Date.now()}-${i}`,
+        type,
+        row,
+        progress: 0,
+        hp: config.hp,
+        maxHP: config.hp,
+        speed: config.speed,
+        damage: config.damage
+      });
     }
+    
+    setGameState(prev => ({
+      ...prev,
+      enemies: [...prev.enemies, ...newEnemies]
+    }));
   };
 
-  const getUnitCost = (type: string) => {
-    const costs: Record<string, number> = {
-      worker: 50,
-      archer: 100,
-      cannon: 200
-    };
-    return costs[type] || 0;
+  const findNearestEnemy = (unit: Unit, enemies: Enemy[]): Enemy | null => {
+    // 简化版：找同一行或附近行的敌人
+    const sameRowEnemies = enemies.filter(e => Math.abs(e.row - unit.row) <= 1);
+    if (sameRowEnemies.length === 0) return null;
+    
+    // 找最近的（progress最高的）
+    return sameRowEnemies.reduce((nearest, enemy) => 
+      enemy.progress > nearest.progress ? enemy : nearest
+    );
   };
 
-  const getUnitName = (type: string) => {
-    const names: Record<string, string> = {
-      worker: '👷 农民',
-      archer: '🏹 弓箭手',
-      cannon: '💣 炮塔'
+  const handleCellClick = (row: number, col: number) => {
+    if (!selectedUnit) return;
+    
+    // 检查金币
+    const cost = UNIT_CONFIG[selectedUnit as keyof typeof UNIT_CONFIG].cost;
+    if (gameState.gold < cost) {
+      alert('金币不足！');
+      return;
+    }
+    
+    // 检查格子
+    if (cells[row][col].type !== 'empty' || cells[row][col].unit) {
+      alert('该格子不可用！');
+      return;
+    }
+    
+    // 显示预购确认（小袋熊建议）
+    setPendingUnit({ row, col, type: selectedUnit });
+  };
+
+  const confirmDeploy = () => {
+    if (!pendingUnit) return;
+    
+    const { row, col, type } = pendingUnit;
+    const config = UNIT_CONFIG[type as keyof typeof UNIT_CONFIG];
+    const cost = config.cost;
+    
+    // 创建单位
+    const newUnit: Unit = {
+      id: `unit-${Date.now()}`,
+      type: type as any,
+      row,
+      col,
+      level: 1,
+      hp: config.hp,
+      maxHP: config.hp,
+      attack: config.attack,
+      attackSpeed: config.attackSpeed,
+      range: config.range,
+      lastAttackTime: 0,
+      goldPerSecond: config.goldPerSecond
     };
-    return names[type] || type;
+    
+    // 更新游戏状态
+    setGameState(prev => ({
+      ...prev,
+      gold: prev.gold - cost,
+      units: [...prev.units, newUnit]
+    }));
+    
+    // 更新格子
+    const newCells = [...cells];
+    newCells[row][col] = { ...newCells[row][col], unit: newUnit };
+    setCells(newCells);
+    
+    setPendingUnit(null);
+    setSelectedUnit(null);
+    
+    // TODO: 通知服务器
+    socket.emit('deploy-unit', { roomId: room.id, unit: newUnit });
+  };
+
+  const cancelDeploy = () => {
+    setPendingUnit(null);
   };
 
   const units = [
-    { type: 'worker', cost: 50 },
-    { type: 'archer', cost: 100 },
-    { type: 'cannon', cost: 200 }
+    { type: 'worker', ...UNIT_CONFIG.worker },
+    { type: 'archer', ...UNIT_CONFIG.archer },
+    { type: 'cannon', ...UNIT_CONFIG.cannon }
   ];
 
   return (
@@ -110,53 +245,110 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
         <div className="game-stats">
           <div className="stat">
             <span className="stat-icon">💰</span>
-            <span className="stat-value">{gold}</span>
+            <span className="stat-value">{Math.floor(gameState.gold)}</span>
           </div>
           <div className="stat">
             <span className="stat-icon">❤️</span>
-            <span className="stat-value">{baseHP}</span>
+            <span className="stat-value">{Math.floor(gameState.baseHP)}</span>
           </div>
           <div className="stat">
             <span className="stat-icon">🌊</span>
-            <span className="stat-value">波次 {wave}/10</span>
+            <span className="stat-value">波次 {gameState.wave}/{gameState.totalWaves}</span>
+          </div>
+          <div className="stat">
+            <span className="stat-icon">👾</span>
+            <span className="stat-value">{gameState.enemies.length} 敌人</span>
           </div>
         </div>
         
-        <div className="players-mini">
-          {room.players.map((player: Player) => (
-            <div key={player.id} className="player-mini">
-              <div className="player-mini-avatar">
-                {player.avatar?.startsWith('data:') ? (
-                  <img src={player.avatar} alt={player.name} />
-                ) : (
-                  <span>{player.avatar}</span>
-                )}
+        <button onClick={spawnWave} className="btn-wave">
+          开始波次
+        </button>
+      </div>
+
+      {/* 游戏区域（合并单位和敌人显示） */}
+      <div className="game-area">
+        <GameBoard cells={cells} onCellClick={handleCellClick} />
+        
+        {/* 敌人显示 */}
+        <div className="enemies-layer">
+          {gameState.enemies.map(enemy => (
+            <div
+              key={enemy.id}
+              className="enemy"
+              style={{
+                top: `${enemy.row * 64 + 20}px`,
+                left: `${enemy.progress * 960 + 60}px`
+              }}
+            >
+              {enemy.type === 'zombie' ? '🧟' : '🛡️'}
+              <div className="enemy-hp">
+                <div className="enemy-hp-bar" style={{ width: `${(enemy.hp / enemy.maxHP) * 100}%` }} />
               </div>
-              <span className="player-mini-name">{player.name}</span>
             </div>
           ))}
         </div>
       </div>
-
-      {/* 游戏区域 */}
-      <GameBoard cells={cells} onCellClick={handleCellClick} />
 
       {/* 底部单位选择栏 */}
       <div className="unit-bar">
         {units.map(unit => (
           <button
             key={unit.type}
-            className={`unit-button ${selectedUnit === unit.type ? 'selected' : ''} ${gold < unit.cost ? 'disabled' : ''}`}
+            className={`unit-button ${selectedUnit === unit.type ? 'selected' : ''} ${gameState.gold < unit.cost ? 'disabled' : ''}`}
             onClick={() => setSelectedUnit(unit.type)}
-            disabled={gold < unit.cost}
+            disabled={gameState.gold < unit.cost}
           >
             <div className="unit-button-content">
-              <span className="unit-icon">{getUnitName(unit.type)}</span>
+              <span className="unit-icon">{unit.name}</span>
               <span className="unit-cost">💰 {unit.cost}</span>
             </div>
           </button>
         ))}
       </div>
+
+      {/* 预购确认弹窗（小袋熊建议） */}
+      {pendingUnit && (
+        <div className="modal-overlay" onClick={cancelDeploy}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>确认部署</h3>
+            <p>
+              {room.players.find((p: Player) => p.id === myPlayerId)?.name} 想在 ({pendingUnit.row}, {pendingUnit.col}) 部署
+              <strong> {UNIT_CONFIG[pendingUnit.type as keyof typeof UNIT_CONFIG].name}</strong>
+            </p>
+            <p className="modal-cost">
+              花费: <strong>💰 {UNIT_CONFIG[pendingUnit.type as keyof typeof UNIT_CONFIG].cost}</strong>
+            </p>
+            <div className="modal-buttons">
+              <button onClick={cancelDeploy} className="btn-secondary">
+                取消
+              </button>
+              <button onClick={confirmDeploy} className="btn-primary">
+                ✅ 确认
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 游戏结束 */}
+      {gameState.status === 'victory' && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <h2>🎉 胜利！</h2>
+            <p>你们成功守住了基地！</p>
+          </div>
+        </div>
+      )}
+
+      {gameState.status === 'defeat' && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <h2>💀 失败</h2>
+            <p>基地被摧毁了...</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
