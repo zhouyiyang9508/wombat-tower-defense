@@ -25,13 +25,67 @@ export function GameInfo() {
             </div>
 
             <div className="info-section">
-              <h3>🏗️ 单位类型</h3>
+              <h3>🏗️ 单位类型（共18种！）</h3>
+              
+              <h4>💰 经济类</h4>
               <ul>
-                <li><strong>👷 农民 (50金币)</strong>: 每秒生产5金币，是经济的基础</li>
-                <li><strong>🏹 弓箭手 (100金币)</strong>: 远程攻击单位，射程3格</li>
-                <li><strong>❄️ 冰冻塔 (150金币)</strong>: 减速敌人50%，同时造成少量伤害</li>
-                <li><strong>💣 炮塔 (200金币)</strong>: 高伤害单位，适合对付坦克僵尸</li>
-                <li><strong>⚡ 电磁塔 (250金币)</strong>: 眩晕敌人2秒，期间无法移动</li>
+                <li><strong>👷 农民 (50💰)</strong>: 生产5金币/秒</li>
+                <li><strong>⛏️ 金矿 (200💰)</strong>: 生产20金币/秒，高产</li>
+              </ul>
+
+              <h4>⚔️ 攻击类</h4>
+              <ul>
+                <li><strong>🏹 弓箭手 (100💰)</strong>: 基础远程，射程3</li>
+                <li><strong>💣 炮塔 (200💰)</strong>: 高伤害，射程2</li>
+                <li><strong>🎯 狙击手 (300💰)</strong>: 超远射程5，高伤害</li>
+                <li><strong>🔫 机枪 (150💰)</strong>: 快速扫射</li>
+                <li><strong>🔴 激光塔 (350💰)</strong>: 穿透攻击全部敌人</li>
+              </ul>
+
+              <h4>🧊 控制类</h4>
+              <ul>
+                <li><strong>❄️ 冰冻塔 (150💰)</strong>: 减速50%</li>
+                <li><strong>⚡ 电磁塔 (250💰)</strong>: 眩晕2秒</li>
+                <li><strong>☠️ 毒塔 (180💰)</strong>: 中毒持续伤害</li>
+                <li><strong>🍯 胶水塔 (120💰)</strong>: 黏住减速70%</li>
+              </ul>
+
+              <h4>✨ 特殊类</h4>
+              <ul>
+                <li><strong>🧱 墙 (50💰)</strong>: 500血量肉盾</li>
+                <li><strong>💥 炸弹 (100💰)</strong>: 5秒后爆炸，200伤害</li>
+                <li><strong>💎 地雷 (80💰)</strong>: 敌人接触爆炸，150伤害</li>
+                <li><strong>💚 治疗塔 (150💰)</strong>: 治疗周围塔，5HP/秒</li>
+              </ul>
+
+              <h4>🌟 辅助类（光环）</h4>
+              <ul>
+                <li><strong>🔥 伤害光环 (200💰)</strong>: 周围塔+50%攻击</li>
+                <li><strong>⏱️ 速度光环 (180💰)</strong>: 周围塔+30%射速</li>
+                <li><strong>🎯 射程光环 (160💰)</strong>: 周围塔+1射程</li>
+              </ul>
+            </div>
+
+            <div className="info-section">
+              <h3>🀄 麻将组合系统</h3>
+              <p>相同类型的塔相邻摆放可获得加成！</p>
+              <ul>
+                <li><strong>3连（3个相邻）</strong>: +20% 效果</li>
+                <li><strong>5连（5个相邻）</strong>: +50% 效果</li>
+                <li><strong>8连（8个相邻）</strong>: +100% 效果（翻倍！）</li>
+              </ul>
+              <p>组合塔会显示 ✨ 特效，升级时可看到加成数值！</p>
+            </div>
+
+            <div className="info-section">
+              <h3>💡 战术组合</h3>
+              <ul>
+                <li><strong>经济爆发</strong>: 3-4个金矿组合 → 超高产出</li>
+                <li><strong>炮塔阵</strong>: 5-8个炮塔 → 伤害爆炸</li>
+                <li><strong>光环核心</strong>: 伤害光环+速度光环 → 周围塔双加成</li>
+                <li><strong>治疗墙</strong>: 墙+治疗塔 → 不死防线</li>
+                <li><strong>地雷阵</strong>: 一排地雷 → Boss克星</li>
+                <li><strong>控制链</strong>: 冰冻+胶水+电磁 → 敌人走不动</li>
               </ul>
             </div>
 
