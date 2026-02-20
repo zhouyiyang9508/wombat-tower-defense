@@ -1,0 +1,105 @@
+.game-board {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.board-grid {
+  background: #2c3e50;
+  border-radius: 10px;
+  padding: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.board-row {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+.board-row:last-child {
+  margin-bottom: 0;
+}
+
+.cell {
+  width: 60px;
+  height: 60px;
+  background: #34495e;
+  border: 2px solid #2c3e50;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cell:hover {
+  border-color: #667eea;
+  background: #3d566e;
+  transform: scale(1.05);
+}
+
+.cell-hovered {
+  border-color: #667eea;
+  background: #3d566e;
+  box-shadow: 0 0 15px rgba(102, 126, 234, 0.5);
+}
+
+.cell-base {
+  background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+  border-color: #1e8449;
+}
+
+.cell-spawn {
+  background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+  border-color: #a93226;
+}
+
+.cell-occupied {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-color: #5568d3;
+}
+
+.cell-content {
+  font-size: 2.5em;
+  z-index: 2;
+}
+
+.cell-coords {
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  font-size: 0.6em;
+  color: rgba(255, 255, 255, 0.3);
+  z-index: 1;
+}
+
+/* 移动端适配 */
+@media (max-width: 1024px) {
+  .cell {
+    width: 50px;
+    height: 50px;
+  }
+  
+  .cell-content {
+    font-size: 2em;
+  }
+}
+
+@media (max-width: 768px) {
+  .cell {
+    width: 40px;
+    height: 40px;
+  }
+  
+  .cell-content {
+    font-size: 1.5em;
+  }
+  
+  .cell-coords {
+    font-size: 0.5em;
+  }
+}

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { AvatarPicker } from './components/AvatarPicker';
+import { Game } from './components/Game';
 import './App.css';
 
 const SERVER_URL = import.meta.env.PROD 
@@ -249,10 +250,9 @@ function App() {
           </div>
         )}
 
-        {currentRoom.status === 'playing' && (
-          <div className="game-area">
-            <p>🎮 游戏已开始！</p>
-            <p>（Phase 1 完成 - 游戏玩法将在后续阶段实现）</p>
+        {currentRoom.status === 'playing' && socket && (
+          <div className="game-transition">
+            <p>游戏即将开始...</p>
           </div>
         )}
       </div>
@@ -282,6 +282,11 @@ function App() {
       </div>
     </div>
   );
+
+  // 如果游戏已开始，显示游戏界面
+  if (currentRoom?.status === 'playing' && socket) {
+    return <Game socket={socket} room={currentRoom} myPlayerId={myPlayerId} />;
+  }
 
   return (
     <div className="app">
