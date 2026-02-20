@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { AvatarPicker } from './components/AvatarPicker';
 import { Game } from './components/Game';
+import { DifficultySelect } from './components/DifficultySelect';
 import './App.css';
 
 const SERVER_URL = import.meta.env.PROD 
@@ -24,13 +25,14 @@ interface Room {
 function App() {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [connected, setConnected] = useState(false);
-  const [currentScreen, setCurrentScreen] = useState<'menu' | 'avatar' | 'room'>('menu');
+  const [currentScreen, setCurrentScreen] = useState<'menu' | 'avatar' | 'room' | 'difficulty'>('menu');
   const [playerName, setPlayerName] = useState('');
   const [playerAvatar, setPlayerAvatar] = useState('🐻');
   const [roomId, setRoomId] = useState('');
   const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
   const [myPlayerId, setMyPlayerId] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  const [gameStarted, setGameStarted] = useState(false);
 
   // 连接到服务器
   useEffect(() => {
@@ -66,7 +68,7 @@ function App() {
     newSocket.on('game-start', (room: Room) => {
       console.log('Game started!', room);
       setCurrentRoom(room);
-      alert('游戏开始！🎮');
+      setCurrentScreen('difficulty'); // 显示难度选择
     });
 
     return () => {
@@ -123,6 +125,12 @@ function App() {
   const handleReady = () => {
     if (!socket || !currentRoom) return;
     socket.emit('player-ready', currentRoom.id);
+  };
+
+  const handleDifficultySelect = (difficulty: 'easy' | 'normal' | 'hard') => {
+    if (!socket || !currentRoom) return;
+    socket.emit('select-difficulty', { roomId: currentRoom.id, difficulty });
+    setGameStarted(true);
   };
 
   const renderMenu = () => (
@@ -284,8 +292,13 @@ function App() {
   );
 
   // 如果游戏已开始，显示游戏界面
-  if (currentRoom?.status === 'playing' && socket) {
+  if (gameStarted && socket && currentRoom) {
     return <Game socket={socket} room={currentRoom} myPlayerId={myPlayerId} />;
+  }
+
+  // 显示难度选择
+  if (currentScreen === 'difficulty') {
+    return <DifficultySelect onSelect={handleDifficultySelect} />;
   }
 
   return (
