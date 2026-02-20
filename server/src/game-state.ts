@@ -1,8 +1,20 @@
 // 游戏状态管理（服务器端）
 
+export type UnitType = 
+  // 经济类
+  'worker' | 'gold-mine' | 
+  // 攻击类
+  'archer' | 'cannon' | 'sniper' | 'machine-gun' | 'laser' |
+  // 控制类
+  'ice' | 'electric' | 'poison' | 'glue' |
+  // 特殊类
+  'wall' | 'bomb' | 'mine' | 'healer' |
+  // 辅助类
+  'aura-damage' | 'aura-speed' | 'aura-range';
+
 export interface Unit {
   id: string;
-  type: 'worker' | 'archer' | 'cannon' | 'ice' | 'electric';
+  type: UnitType;
   row: number;
   col: number;
   level: number;
@@ -13,9 +25,23 @@ export interface Unit {
   range: number;
   lastAttackTime: number;
   goldPerSecond?: number;
-  ownerId: string; // 部署该单位的玩家ID
-  slowEffect?: number; // 减速效果（冰冻塔）
-  stunDuration?: number; // 眩晕时长（电磁塔）
+  ownerId: string;
+  // 特效
+  slowEffect?: number;
+  stunDuration?: number;
+  poisonDPS?: number;
+  glueDuration?: number;
+  // 辅助光环
+  damageBonus?: number;
+  speedBonus?: number;
+  rangeBonus?: number;
+  // 特殊
+  isWall?: boolean;
+  isBomb?: boolean;
+  isMine?: boolean;
+  healPerSecond?: number;
+  // 组合加成
+  comboBonus?: number;
 }
 
 export interface Enemy {
@@ -61,12 +87,34 @@ export interface GameState {
   timeWarpMode: boolean;
 }
 
-export const UNIT_CONFIG = {
-  worker: { cost: 50, hp: 50, attack: 0, attackSpeed: 0, range: 0, goldPerSecond: 5 },
-  archer: { cost: 100, hp: 80, attack: 15, attackSpeed: 1, range: 3 },
-  cannon: { cost: 200, hp: 120, attack: 50, attackSpeed: 2, range: 2 },
-  ice: { cost: 150, hp: 90, attack: 10, attackSpeed: 1, range: 3, slowEffect: 0.5 }, // 减速50%
-  electric: { cost: 250, hp: 100, attack: 0, attackSpeed: 3, range: 2, stunDuration: 2 } // 眩晕2秒
+export const UNIT_CONFIG: Record<UnitType, any> = {
+  // 经济类
+  'worker': { cost: 50, hp: 50, attack: 0, attackSpeed: 0, range: 0, goldPerSecond: 5 },
+  'gold-mine': { cost: 200, hp: 100, attack: 0, attackSpeed: 0, range: 0, goldPerSecond: 20 },
+  
+  // 攻击类
+  'archer': { cost: 100, hp: 80, attack: 15, attackSpeed: 1, range: 3 },
+  'cannon': { cost: 200, hp: 120, attack: 50, attackSpeed: 2, range: 2 },
+  'sniper': { cost: 300, hp: 60, attack: 100, attackSpeed: 3, range: 5 }, // 高伤远程
+  'machine-gun': { cost: 150, hp: 70, attack: 8, attackSpeed: 0.3, range: 2 }, // 快速扫射
+  'laser': { cost: 350, hp: 100, attack: 30, attackSpeed: 0.5, range: 4, penetrate: true }, // 穿透
+  
+  // 控制类
+  'ice': { cost: 150, hp: 90, attack: 10, attackSpeed: 1, range: 3, slowEffect: 0.5 },
+  'electric': { cost: 250, hp: 100, attack: 0, attackSpeed: 3, range: 2, stunDuration: 2 },
+  'poison': { cost: 180, hp: 85, attack: 5, attackSpeed: 1.5, range: 3, poisonDPS: 10 }, // 中毒持续伤害
+  'glue': { cost: 120, hp: 80, attack: 0, attackSpeed: 2, range: 2, glueDuration: 3 }, // 黏住减速
+  
+  // 特殊类
+  'wall': { cost: 50, hp: 500, attack: 0, attackSpeed: 0, range: 0, isWall: true }, // 纯肉盾
+  'bomb': { cost: 100, hp: 50, attack: 200, attackSpeed: 0, range: 2, isBomb: true }, // 一次性爆炸
+  'mine': { cost: 80, hp: 10, attack: 150, attackSpeed: 0, range: 0, isMine: true }, // 地雷
+  'healer': { cost: 150, hp: 100, attack: 0, attackSpeed: 1, range: 2, healPerSecond: 5 }, // 治疗
+  
+  // 辅助类（光环）
+  'aura-damage': { cost: 200, hp: 80, attack: 0, attackSpeed: 0, range: 2, damageBonus: 0.5 }, // 周围+50%攻击
+  'aura-speed': { cost: 180, hp: 80, attack: 0, attackSpeed: 0, range: 2, speedBonus: 0.3 }, // 周围+30%射速
+  'aura-range': { cost: 160, hp: 80, attack: 0, attackSpeed: 0, range: 2, rangeBonus: 1 } // 周围+1射程
 };
 
 export const ENEMY_CONFIG = {
@@ -197,10 +245,27 @@ export function updateGameState(state: GameState, deltaTime: number): GameState 
   let newState = { ...state };
   const now = Date.now();
   
-  // 1. 农民生产金币
+  // 0. 应用光环和组合加成
+  newState.units = applyAuraEffects(newState.units);
+  
+  // 1. 生产金币（农民和金矿）
   newState.units.forEach(unit => {
-    if (unit.type === 'worker' && unit.goldPerSecond) {
-      newState.gold += unit.goldPerSecond * deltaTime * newState.goldMultiplier;
+    if (unit.goldPerSecond) {
+      newState.gold += unit.goldPerSecond * deltaTime * newState.goldMultiplier * (1 + (unit.comboBonus || 0));
+    }
+  });
+  
+  // 1.5 治疗塔治疗周围单位
+  newState.units.forEach(healer => {
+    if (healer.healPerSecond) {
+      newState.units.forEach(target => {
+        if (target.id !== healer.id) {
+          const dist = Math.abs(target.row - healer.row) + Math.abs(target.col - healer.col);
+          if (dist <= healer.range && target.hp < target.maxHP) {
+            target.hp = Math.min(target.maxHP, target.hp + healer.healPerSecond * deltaTime);
+          }
+        }
+      });
     }
   });
   
@@ -228,36 +293,130 @@ export function updateGameState(state: GameState, deltaTime: number): GameState 
   newState.enemies = newState.enemies.filter(e => e.progress < 1);
   
   // 4. 单位攻击
-  newState.units.forEach(unit => {
+  newState.units = newState.units.filter(unit => {
+    // 地雷检测：敌人接触时爆炸
+    if (unit.isMine) {
+      const nearbyEnemy = newState.enemies.find(e => 
+        e.row === unit.row && Math.abs(e.progress * 14 - unit.col) < 0.5
+      );
+      if (nearbyEnemy) {
+        // 地雷爆炸！范围伤害
+        newState.enemies.forEach(e => {
+          const dist = Math.sqrt(Math.pow(e.row - unit.row, 2) + Math.pow(e.progress * 14 - unit.col, 2));
+          if (dist < 2) {
+            e.hp -= unit.attack;
+          }
+        });
+        return false; // 移除地雷
+      }
+      return true; // 保留地雷
+    }
+    
+    // 炸弹：手动触发或时间到爆炸
+    if (unit.isBomb && unit.lastAttackTime > 0 && now - unit.lastAttackTime > 5000) {
+      // 5秒后自动爆炸
+      newState.enemies.forEach(e => {
+        const dist = Math.sqrt(Math.pow(e.row - unit.row, 2) + Math.pow(e.progress * 14 - unit.col, 2));
+        if (dist < unit.range) {
+          e.hp -= unit.attack;
+        }
+      });
+      return false; // 移除炸弹
+    }
+    
+    // 墙：不攻击，只防御
+    if (unit.isWall) {
+      return true;
+    }
+    
+    // 光环塔：不直接攻击
+    if (unit.damageBonus || unit.speedBonus || unit.rangeBonus) {
+      return true;
+    }
+    
+    // 治疗塔：不攻击
+    if (unit.healPerSecond) {
+      return true;
+    }
+    
+    // 普通攻击塔
     if (now - unit.lastAttackTime > unit.attackSpeed * 1000 * newState.attackSpeedMultiplier) {
-      const target = findNearestEnemy(unit, newState.enemies);
-      if (target) {
-        // 冰冻塔：减速效果
-        if (unit.type === 'ice' && unit.slowEffect) {
-          target.slowMultiplier = Math.min(target.slowMultiplier, unit.slowEffect);
-          target.hp -= unit.attack; // 同时造成少量伤害
-        }
-        // 电磁塔：眩晕效果
-        else if (unit.type === 'electric' && unit.stunDuration) {
-          target.stunnedUntil = now + unit.stunDuration * 1000;
-        }
-        // 普通攻击
-        else if (unit.attack > 0) {
-          target.hp -= unit.attack;
-        }
-        
+      const config = UNIT_CONFIG[unit.type];
+      
+      // 激光塔：穿透攻击所有敌人在一条线上
+      if (config.penetrate) {
+        const targets = newState.enemies.filter(e => 
+          Math.abs(e.row - unit.row) <= 1 && e.progress * 14 >= unit.col
+        );
+        targets.forEach(t => {
+          t.hp -= unit.attack;
+        });
         unit.lastAttackTime = now;
-        
-        // 吸血模式
-        if (newState.vampireMode && target.hp <= 0) {
-          newState.baseHP = Math.min(newState.maxBaseHP, newState.baseHP + newState.maxBaseHP * 0.01);
+      }
+      // 胶水塔：黏住效果
+      else if (unit.type === 'glue' && config.glueDuration) {
+        const target = findNearestEnemy(unit, newState.enemies);
+        if (target) {
+          target.slowMultiplier = 0.3; // 减速70%
+          target.stunnedUntil = now + config.glueDuration * 1000;
+          unit.lastAttackTime = now;
         }
-        
-        // 移除死亡的敌人
-        newState.enemies = newState.enemies.filter(e => e.hp > 0);
+      }
+      // 毒塔：中毒持续伤害
+      else if (unit.type === 'poison' && config.poisonDPS) {
+        const target = findNearestEnemy(unit, newState.enemies);
+        if (target) {
+          target.hp -= unit.attack;
+          // 标记中毒（在敌人数据结构中）
+          (target as any).poisonDamage = config.poisonDPS;
+          (target as any).poisonUntil = now + 3000; // 持续3秒
+          unit.lastAttackTime = now;
+        }
+      }
+      // 冰冻塔
+      else if (unit.type === 'ice' && unit.slowEffect) {
+        const target = findNearestEnemy(unit, newState.enemies);
+        if (target) {
+          target.slowMultiplier = Math.min(target.slowMultiplier, unit.slowEffect);
+          target.hp -= unit.attack;
+          unit.lastAttackTime = now;
+        }
+      }
+      // 电磁塔
+      else if (unit.type === 'electric' && unit.stunDuration) {
+        const target = findNearestEnemy(unit, newState.enemies);
+        if (target) {
+          target.stunnedUntil = now + unit.stunDuration * 1000;
+          unit.lastAttackTime = now;
+        }
+      }
+      // 普通攻击
+      else if (unit.attack > 0) {
+        const target = findNearestEnemy(unit, newState.enemies);
+        if (target) {
+          target.hp -= unit.attack;
+          unit.lastAttackTime = now;
+          
+          if (newState.vampireMode && target.hp <= 0) {
+            newState.baseHP = Math.min(newState.maxBaseHP, newState.baseHP + newState.maxBaseHP * 0.01);
+          }
+        }
       }
     }
+    
+    return true; // 保留单位
   });
+  
+  // 应用中毒持续伤害
+  newState.enemies.forEach(e => {
+    const enemy = e as any;
+    if (enemy.poisonDamage && now < enemy.poisonUntil) {
+      e.hp -= enemy.poisonDamage * deltaTime;
+    }
+  });
+  
+  // 移除死亡的敌人
+  newState.enemies = newState.enemies.filter(e => e.hp > 0);
   
   // 5. 检查基地血量
   if (newState.baseHP <= 0) {
@@ -351,18 +510,85 @@ export function selectBuff(state: GameState, buffId: string, playerId: string): 
   return newState;
 }
 
+// 检测麻将组合加成
+function calculateComboBonus(unit: Unit, allUnits: Unit[]): number {
+  let bonus = 0;
+  
+  // 查找相邻的相同类型塔
+  const adjacentSameType = allUnits.filter(u => {
+    if (u.type !== unit.type || u.id === unit.id) return false;
+    const rowDist = Math.abs(u.row - unit.row);
+    const colDist = Math.abs(u.col - unit.col);
+    return (rowDist <= 1 && colDist <= 1); // 8方向相邻
+  });
+  
+  const comboSize = adjacentSameType.length + 1; // 包括自己
+  
+  // 3连：+20%
+  if (comboSize >= 3) {
+    bonus += 0.2;
+  }
+  
+  // 5连：再+30%（总+50%）
+  if (comboSize >= 5) {
+    bonus += 0.3;
+  }
+  
+  // 8连：再+50%（总+100%）
+  if (comboSize >= 8) {
+    bonus += 0.5;
+  }
+  
+  return bonus;
+}
+
+// 应用光环效果
+function applyAuraEffects(units: Unit[]): Unit[] {
+  return units.map(unit => {
+    let damageMultiplier = 1;
+    let speedMultiplier = 1;
+    let extraRange = 0;
+    
+    // 查找周围的光环塔
+    units.forEach(other => {
+      const dist = Math.abs(unit.row - other.row) + Math.abs(unit.col - other.col);
+      
+      if (other.damageBonus && dist <= (other.range || 2)) {
+        damageMultiplier *= (1 + other.damageBonus);
+      }
+      if (other.speedBonus && dist <= (other.range || 2)) {
+        speedMultiplier *= (1 + other.speedBonus);
+      }
+      if (other.rangeBonus && dist <= (other.range || 2)) {
+        extraRange += other.rangeBonus;
+      }
+    });
+    
+    // 应用组合加成
+    const comboBonus = calculateComboBonus(unit, units);
+    damageMultiplier *= (1 + comboBonus);
+    
+    return {
+      ...unit,
+      attack: unit.attack * damageMultiplier,
+      attackSpeed: unit.attackSpeed / speedMultiplier,
+      range: unit.range + extraRange,
+      comboBonus
+    };
+  });
+}
+
 export function upgradeUnit(state: GameState, unitId: string): GameState {
   const unit = state.units.find(u => u.id === unitId);
-  if (!unit || unit.level >= 3) return state; // 最高3级
+  if (!unit || unit.level >= 3) return state;
   
-  const upgradeCost = 100 * unit.level; // 升级成本递增
+  const upgradeCost = 100 * unit.level;
   
   if (state.gold < upgradeCost) return state;
   
-  // 升级单位
   unit.level += 1;
   unit.maxHP *= 1.5;
-  unit.hp = unit.maxHP; // 恢复满血
+  unit.hp = unit.maxHP;
   unit.attack *= 1.5;
   
   if (unit.goldPerSecond) {

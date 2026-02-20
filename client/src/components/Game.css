@@ -79,23 +79,73 @@
   font-size: 0.9em;
 }
 
-.unit-bar {
+.unit-bar-container {
   max-width: 1200px;
   margin: 20px auto 0;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border-radius: 15px;
+  padding: 15px;
+}
+
+.category-tabs {
   display: flex;
-  gap: 15px;
+  gap: 10px;
+  margin-bottom: 15px;
   justify-content: center;
+  flex-wrap: wrap;
+}
+
+.category-tab {
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 2px solid #ddd;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-weight: bold;
+  font-size: 0.9em;
+}
+
+.category-tab:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+}
+
+.category-tab.active {
+  border-width: 3px;
+  transform: scale(1.05);
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+}
+
+.unit-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.combo-tip {
+  text-align: center;
+  color: white;
+  font-size: 0.9em;
+  margin-top: 10px;
+  padding: 8px;
+  background: rgba(255, 215, 0, 0.2);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 215, 0, 0.5);
 }
 
 .unit-button {
-  flex: 1;
-  max-width: 200px;
-  padding: 15px;
+  padding: 12px 8px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border: 3px solid transparent;
-  border-radius: 15px;
+  border-radius: 12px;
   cursor: pointer;
   transition: all 0.3s;
+  min-height: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .unit-button:hover:not(.disabled) {
@@ -119,18 +169,44 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
+  width: 100%;
 }
 
 .unit-icon {
-  font-size: 2em;
+  font-size: 2.5em;
+}
+
+.unit-name {
+  font-size: 0.75em;
   color: white;
+  font-weight: bold;
+  text-align: center;
+  line-height: 1.2;
 }
 
 .unit-cost {
-  font-size: 1em;
-  color: white;
+  font-size: 0.85em;
+  color: #ffd700;
   font-weight: bold;
+}
+
+.combo-bonus {
+  text-align: center;
+  color: #ffd700;
+  font-weight: bold;
+  margin: 10px 0;
+  padding: 8px;
+  background: rgba(255, 215, 0, 0.1);
+  border-radius: 8px;
+}
+
+.modal-desc {
+  text-align: center;
+  color: #999;
+  font-size: 0.9em;
+  margin: 10px 0;
+  font-style: italic;
 }
 
 .btn-wave {

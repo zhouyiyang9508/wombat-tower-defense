@@ -31,23 +31,30 @@ export function GameBoard({ onCellClick, onUnitClick, cells }: GameBoardProps) {
     return classes.join(' ');
   };
 
+  const getUnitEmoji = (type: string): string => {
+    const emojiMap: Record<string, string> = {
+      'worker': '👷', 'gold-mine': '⛏️',
+      'archer': '🏹', 'cannon': '💣', 'sniper': '🎯', 'machine-gun': '🔫', 'laser': '🔴',
+      'ice': '❄️', 'electric': '⚡', 'poison': '☠️', 'glue': '🍯',
+      'wall': '🧱', 'bomb': '💥', 'mine': '💎', 'healer': '💚',
+      'aura-damage': '🔥', 'aura-speed': '⏱️', 'aura-range': '🎯'
+    };
+    return emojiMap[type] || '❓';
+  };
+
   const getCellContent = (cell: Cell) => {
     if (cell.type === 'base') return '🏰';
     if (cell.type === 'spawn') return '☠️';
     if (cell.unit) {
       const levelStars = '⭐'.repeat(cell.unit.level || 1);
-      let emoji = '❓';
-      switch (cell.unit.type) {
-        case 'worker': emoji = '👷'; break;
-        case 'archer': emoji = '🏹'; break;
-        case 'cannon': emoji = '💣'; break;
-        case 'ice': emoji = '❄️'; break;
-        case 'electric': emoji = '⚡'; break;
-      }
+      const emoji = getUnitEmoji(cell.unit.type);
+      const hasCombo = cell.unit.comboBonus && cell.unit.comboBonus > 0;
+      
       return (
         <div className="unit-display">
           <span className="unit-emoji">{emoji}</span>
           {cell.unit.level > 1 && <span className="unit-level">{levelStars}</span>}
+          {hasCombo && <span className="combo-indicator">✨</span>}
         </div>
       );
     }

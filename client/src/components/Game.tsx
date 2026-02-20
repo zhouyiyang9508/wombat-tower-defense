@@ -5,6 +5,7 @@ import { BuffSelect } from './BuffSelect';
 import { GameInfo } from './GameInfo';
 import { soundManager } from '../utils/sound';
 import { BUFFS } from '../types/buffs';
+import { UNIT_DATA, UNIT_CATEGORIES } from '../data/units';
 import './Game.css';
 
 interface Player {
@@ -37,13 +38,7 @@ interface GameProps {
   myPlayerId: string;
 }
 
-const UNIT_CONFIG = {
-  worker: { name: '👷 农民', cost: 50 },
-  archer: { name: '🏹 弓箭手', cost: 100 },
-  cannon: { name: '💣 炮塔', cost: 200 },
-  ice: { name: '❄️ 冰冻塔', cost: 150 },
-  electric: { name: '⚡ 电磁塔', cost: 250 }
-};
+// UNIT_CONFIG moved to ../data/units.ts
 
 export function Game({ socket, room, myPlayerId }: GameProps) {
   const [gameState, setGameState] = useState<GameState | null>(null);
@@ -52,6 +47,8 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
   const [showBuffSelect, setShowBuffSelect] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [selectedUnitForUpgrade, setSelectedUnitForUpgrade] = useState<any | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string>('economy');
+  const [showUnitMenu, setShowUnitMenu] = useState(false);
   const prevEnemyCountRef = useRef(0);
   const prevStatusRef = useRef<string>('');
   
@@ -138,11 +135,17 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
   }
 
   const handleCellClick = (row: number, col: number) => {
-    if (!selectedUnit) return;
+    if (!selectedUnit) {
+      setShowUnitMenu(true);
+      return;
+    }
     
     // 检查金币
-    const cost = UNIT_CONFIG[selectedUnit as keyof typeof UNIT_CONFIG].cost * gameState.costMultiplier;
-    if (gameState.gold < cost) {
+    const unitData = UNIT_DATA[selectedUnit as keyof typeof UNIT_DATA];
+    if (!unitData) return;
+    
+    const cost = unitData.cost * (gameState?.costMultiplier || 1);
+    if (gameState && gameState.gold < cost) {
       alert('金币不足！');
       return;
     }
@@ -350,23 +353,51 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
       </div>
 
       {/* 底部单位选择栏 */}
-      <div className="unit-bar">
-        {units.map(unit => {
-          const cost = Math.floor(unit.cost * gameState.costMultiplier);
-          return (
+      <div className="unit-bar-container">
+        {/* 分类选择 */}
+        <div className="category-tabs">
+          {Object.entries(UNIT_CATEGORIES).map(([key, cat]) => (
             <button
-              key={unit.type}
-              className={`unit-button ${selectedUnit === unit.type ? 'selected' : ''} ${gameState.gold < cost ? 'disabled' : ''}`}
-              onClick={() => setSelectedUnit(unit.type)}
-              disabled={gameState.gold < cost}
+              key={key}
+              className={`category-tab ${selectedCategory === key ? 'active' : ''}`}
+              onClick={() => setSelectedCategory(key)}
+              style={{ borderColor: selectedCategory === key ? cat.color : '#ddd' }}
             >
-              <div className="unit-button-content">
-                <span className="unit-icon">{unit.name}</span>
-                <span className="unit-cost">💰 {cost}</span>
-              </div>
+              {cat.name}
             </button>
-          );
-        })}
+          ))}
+        </div>
+        
+        {/* 当前分类的单位 */}
+        <div className="unit-bar">
+          {Object.entries(UNIT_DATA)
+            .filter(([_, data]) => data.category === selectedCategory)
+            .map(([type, data]) => {
+              const cost = Math.floor(data.cost * gameState.costMultiplier);
+              const canAfford = gameState.gold >= cost;
+              
+              return (
+                <button
+                  key={type}
+                  className={`unit-button ${selectedUnit === type ? 'selected' : ''} ${!canAfford ? 'disabled' : ''}`}
+                  onClick={() => setSelectedUnit(type)}
+                  disabled={!canAfford}
+                  title={data.desc}
+                >
+                  <div className="unit-button-content">
+                    <span className="unit-icon">{data.name.split(' ')[0]}</span>
+                    <span className="unit-name">{data.name.split(' ').slice(1).join(' ')}</span>
+                    <span className="unit-cost">💰{cost}</span>
+                  </div>
+                </button>
+              );
+            })}
+        </div>
+        
+        {/* 组合加成提示 */}
+        <div className="combo-tip">
+          💡 相同塔相邻：3连+20%，5连+50%，8连+100%
+        </div>
       </div>
 
       {/* 升级确认弹窗 */}
@@ -376,13 +407,14 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
             <h3>升级单位</h3>
             <p>
               升级 <strong>
-                {selectedUnitForUpgrade.type === 'worker' && '👷 农民'}
-                {selectedUnitForUpgrade.type === 'archer' && '🏹 弓箭手'}
-                {selectedUnitForUpgrade.type === 'cannon' && '💣 炮塔'}
-                {selectedUnitForUpgrade.type === 'ice' && '❄️ 冰冻塔'}
-                {selectedUnitForUpgrade.type === 'electric' && '⚡ 电磁塔'}
+                {UNIT_DATA[selectedUnitForUpgrade.type as keyof typeof UNIT_DATA]?.name || selectedUnitForUpgrade.type}
               </strong> 到 Lv.{selectedUnitForUpgrade.level + 1}
             </p>
+            {selectedUnitForUpgrade.comboBonus > 0 && (
+              <p className="combo-bonus">
+                🎉 组合加成: +{Math.floor(selectedUnitForUpgrade.comboBonus * 100)}%
+              </p>
+            )}
             <div className="upgrade-stats">
               <div className="stat-change">
                 <span>攻击力</span>
@@ -421,10 +453,13 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
             <h3>确认部署</h3>
             <p>
               {room.players.find((p: Player) => p.id === myPlayerId)?.name} 想在 ({pendingUnit.row}, {pendingUnit.col}) 部署
-              <strong> {UNIT_CONFIG[pendingUnit.type as keyof typeof UNIT_CONFIG].name}</strong>
+              <strong> {UNIT_DATA[pendingUnit.type as keyof typeof UNIT_DATA]?.name || pendingUnit.type}</strong>
+            </p>
+            <p className="modal-desc">
+              {UNIT_DATA[pendingUnit.type as keyof typeof UNIT_DATA]?.desc}
             </p>
             <p className="modal-cost">
-              花费: <strong>💰 {Math.floor(UNIT_CONFIG[pendingUnit.type as keyof typeof UNIT_CONFIG].cost * gameState.costMultiplier)}</strong>
+              花费: <strong>💰 {Math.floor((UNIT_DATA[pendingUnit.type as keyof typeof UNIT_DATA]?.cost || 0) * gameState.costMultiplier)}</strong>
             </p>
             <div className="modal-buttons">
               <button onClick={cancelDeploy} className="btn-secondary">
