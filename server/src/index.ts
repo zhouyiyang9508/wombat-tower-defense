@@ -27,16 +27,10 @@ const io = new Server(httpServer, {
 app.use(cors());
 app.use(express.json());
 
-// Serve static files in production
+// Serve static files in production (但不做catch-all，留到最后)
 if (process.env.NODE_ENV === 'production') {
   const publicPath = path.join(__dirname, 'public');
   app.use(express.static(publicPath));
-  
-  app.get('*', (req, res) => {
-    if (!req.path.startsWith('/health') && !req.path.startsWith('/socket.io')) {
-      res.sendFile(path.join(publicPath, 'index.html'));
-    }
-  });
 }
 
 // 数据结构
@@ -354,6 +348,14 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString()
   });
 });
+
+// SPA Catch-all (必须在所有其他路由之后)
+if (process.env.NODE_ENV === 'production') {
+  const publicPath = path.join(__dirname, 'public');
+  app.use((req, res) => {
+    res.sendFile(path.join(publicPath, 'index.html'));
+  });
+}
 
 // 启动服务器
 const PORT = process.env.PORT || 18080;
