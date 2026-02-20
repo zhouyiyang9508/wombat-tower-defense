@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Socket } from 'socket.io-client';
 import { GameBoard } from './GameBoard';
 import { BuffSelect } from './BuffSelect';
 import { GameInfo } from './GameInfo';
+import { soundManager } from '../utils/sound';
 import { BUFFS } from '../types/buffs';
 import './Game.css';
 
@@ -47,6 +48,9 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
   const [selectedUnit, setSelectedUnit] = useState<string | null>(null);
   const [pendingUnit, setPendingUnit] = useState<{ row: number; col: number; type: string } | null>(null);
   const [showBuffSelect, setShowBuffSelect] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const prevEnemyCountRef = useRef(0);
+  const prevStatusRef = useRef<string>('');
   
   // 初始化5x15网格
   const [cells, setCells] = useState(() => {
@@ -68,6 +72,35 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
   useEffect(() => {
     const handleGameStateUpdate = (newState: GameState) => {
       console.log('Game state updated:', newState);
+      
+      // 音效处理
+      if (gameState) {
+        // 检测Boss出现
+        if (newState.enemies.some(e => e.type === 'boss') && 
+            !gameState.enemies.some(e => e.type === 'boss')) {
+          soundManager.bossAppear();
+        }
+        
+        // 检测敌人数量变化（敌人死亡）
+        if (newState.enemies.length < prevEnemyCountRef.current) {
+          soundManager.enemyDeath();
+        }
+        
+        // 检测状态变化
+        if (newState.status !== prevStatusRef.current) {
+          if (newState.status === 'playing' && prevStatusRef.current === 'waiting') {
+            soundManager.waveStart();
+          } else if (newState.status === 'victory') {
+            soundManager.victory();
+          } else if (newState.status === 'defeat') {
+            soundManager.defeat();
+          }
+        }
+        
+        prevStatusRef.current = newState.status;
+      }
+      
+      prevEnemyCountRef.current = newState.enemies.length;
       setGameState(newState);
       
       // 更新格子状态（显示单位）
@@ -90,7 +123,7 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
     return () => {
       socket.off('game-state-update', handleGameStateUpdate);
     };
-  }, [socket, cells]);
+  }, [socket, cells, gameState]);
 
   if (!gameState) {
     return (
@@ -126,6 +159,9 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
     
     const { row, col, type } = pendingUnit;
     
+    // 播放部署音效
+    soundManager.deploy();
+    
     // 发送到服务器
     socket.emit('deploy-unit', {
       roomId: room.id,
@@ -134,6 +170,11 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
     
     setPendingUnit(null);
     setSelectedUnit(null);
+  };
+
+  const toggleSound = () => {
+    const enabled = soundManager.toggle();
+    setSoundEnabled(enabled);
   };
 
   const cancelDeploy = () => {
@@ -163,6 +204,11 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
     <div className="game">
       {/* 帮助按钮 */}
       <GameInfo />
+      
+      {/* 音效开关 */}
+      <button className="sound-toggle" onClick={toggleSound} title={soundEnabled ? '关闭音效' : '开启音效'}>
+        {soundEnabled ? '🔊' : '🔇'}
+      </button>
       
       {/* 顶部状态栏 */}
       <div className="game-header">
