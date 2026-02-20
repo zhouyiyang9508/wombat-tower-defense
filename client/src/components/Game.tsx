@@ -52,10 +52,9 @@ interface GameProps {
 
 // UNIT_CONFIG moved to ../data/units.ts
 
-export function Game({ socket, room, myPlayerId }: GameProps) {
+export function Game({ socket, room, myPlayerId: _myPlayerId }: GameProps) {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [selectedUnit, setSelectedUnit] = useState<string | null>(null);
-  const [pendingUnit, setPendingUnit] = useState<{ row: number; col: number; type: string } | null>(null);
   const [showBuffSelect, setShowBuffSelect] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [selectedUnitForUpgrade, setSelectedUnitForUpgrade] = useState<any | null>(null);
@@ -175,25 +174,14 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
       return;
     }
     
-    // 显示预购确认
-    setPendingUnit({ row, col, type: selectedUnit });
-  };
-
-  const confirmDeploy = () => {
-    if (!pendingUnit) return;
-    
-    const { row, col, type } = pendingUnit;
-    
-    // 播放部署音效
+    // 直接部署，不需要确认
     soundManager.deploy();
     
-    // 发送到服务器
     socket.emit('deploy-unit', {
       roomId: room.id,
-      unit: { type, row, col, id: `unit-${Date.now()}` }
+      unit: { type: selectedUnit, row, col, id: `unit-${Date.now()}` }
     });
     
-    setPendingUnit(null);
     setSelectedUnit(null);
   };
 
@@ -230,10 +218,6 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
 
   const cancelUpgrade = () => {
     setSelectedUnitForUpgrade(null);
-  };
-
-  const cancelDeploy = () => {
-    setPendingUnit(null);
   };
 
   const handleSpawnWave = () => {
@@ -453,33 +437,6 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
               </button>
               <button onClick={confirmUpgrade} className="btn-primary">
                 ✅ 升级
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 预购确认弹窗 */}
-      {pendingUnit && (
-        <div className="modal-overlay" onClick={cancelDeploy}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>确认部署</h3>
-            <p>
-              {room.players.find((p: Player) => p.id === myPlayerId)?.name} 想在 ({pendingUnit.row}, {pendingUnit.col}) 部署
-              <strong> {UNIT_DATA[pendingUnit.type as keyof typeof UNIT_DATA]?.name || pendingUnit.type}</strong>
-            </p>
-            <p className="modal-desc">
-              {UNIT_DATA[pendingUnit.type as keyof typeof UNIT_DATA]?.desc}
-            </p>
-            <p className="modal-cost">
-              花费: <strong>💰 {Math.floor((UNIT_DATA[pendingUnit.type as keyof typeof UNIT_DATA]?.cost || 0) * gameState.costMultiplier)}</strong>
-            </p>
-            <div className="modal-buttons">
-              <button onClick={cancelDeploy} className="btn-secondary">
-                取消
-              </button>
-              <button onClick={confirmDeploy} className="btn-primary">
-                ✅ 确认
               </button>
             </div>
           </div>

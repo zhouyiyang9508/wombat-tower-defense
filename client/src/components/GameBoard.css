@@ -64,7 +64,7 @@
 }
 
 .cell-content {
-  font-size: 2.5em;
+  font-size: 1.8em;
   z-index: 2;
 }
 
@@ -85,7 +85,7 @@
 }
 
 .unit-emoji {
-  font-size: 2.5em;
+  font-size: 1.8em;
 }
 
 .unit-level {
@@ -119,8 +119,9 @@
     height: 50px;
   }
   
-  .cell-content {
-    font-size: 2em;
+  .cell-content,
+  .unit-emoji {
+    font-size: 1.6em;
   }
 }
 
@@ -130,8 +131,9 @@
     height: 40px;
   }
   
-  .cell-content {
-    font-size: 1.5em;
+  .cell-content,
+  .unit-emoji {
+    font-size: 1.3em;
   }
   
   .cell-coords {
