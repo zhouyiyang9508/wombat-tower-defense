@@ -2,7 +2,7 @@
 
 export interface Unit {
   id: string;
-  type: 'worker' | 'archer' | 'cannon';
+  type: 'worker' | 'archer' | 'cannon' | 'ice' | 'electric';
   row: number;
   col: number;
   level: number;
@@ -14,17 +14,22 @@ export interface Unit {
   lastAttackTime: number;
   goldPerSecond?: number;
   ownerId: string; // 部署该单位的玩家ID
+  slowEffect?: number; // 减速效果（冰冻塔）
+  stunDuration?: number; // 眩晕时长（电磁塔）
 }
 
 export interface Enemy {
   id: string;
   type: 'zombie' | 'tank' | 'boss';
   row: number;
+  path: number; // 路径ID（0=上路，1=中上路，2=中路，3=中下路，4=下路）
   progress: number;
   hp: number;
   maxHP: number;
   speed: number;
   damage: number;
+  slowMultiplier: number; // 减速倍数（1=正常，0.5=减速50%）
+  stunnedUntil: number; // 眩晕到何时（timestamp）
 }
 
 export interface Buff {
@@ -59,7 +64,9 @@ export interface GameState {
 export const UNIT_CONFIG = {
   worker: { cost: 50, hp: 50, attack: 0, attackSpeed: 0, range: 0, goldPerSecond: 5 },
   archer: { cost: 100, hp: 80, attack: 15, attackSpeed: 1, range: 3 },
-  cannon: { cost: 200, hp: 120, attack: 50, attackSpeed: 2, range: 2 }
+  cannon: { cost: 200, hp: 120, attack: 50, attackSpeed: 2, range: 2 },
+  ice: { cost: 150, hp: 90, attack: 10, attackSpeed: 1, range: 3, slowEffect: 0.5 }, // 减速50%
+  electric: { cost: 250, hp: 100, attack: 0, attackSpeed: 3, range: 2, stunDuration: 2 } // 眩晕2秒
 };
 
 export const ENEMY_CONFIG = {
@@ -100,6 +107,15 @@ export function createGameState(roomId: string, difficulty: 'easy' | 'normal' | 
   };
 }
 
+// 5条路径定义（row值）
+const PATHS = [
+  0, // 上路
+  1, // 中上路
+  2, // 中路
+  3, // 中下路
+  4  // 下路
+];
+
 export function spawnWave(state: GameState): GameState {
   const newEnemies: Enemy[] = [];
   const baseCount = 5 + state.wave * 2;
@@ -110,51 +126,60 @@ export function spawnWave(state: GameState): GameState {
   
   if (isBossWave) {
     // Boss + 小怪
-    const bossRow = Math.floor(Math.random() * 5);
+    const bossPath = Math.floor(Math.random() * 5);
     newEnemies.push({
       id: `boss-${Date.now()}`,
       type: 'boss',
-      row: bossRow,
+      row: PATHS[bossPath],
+      path: bossPath,
       progress: 0,
       hp: ENEMY_CONFIG.boss.hp * state.stage,
       maxHP: ENEMY_CONFIG.boss.hp * state.stage,
       speed: ENEMY_CONFIG.boss.speed,
-      damage: ENEMY_CONFIG.boss.damage
+      damage: ENEMY_CONFIG.boss.damage,
+      slowMultiplier: 1,
+      stunnedUntil: 0
     });
     
-    // 小怪
+    // 小怪（多路径进攻）
     for (let i = 0; i < 10; i++) {
       const type = Math.random() > 0.5 ? 'tank' : 'zombie';
       const config = ENEMY_CONFIG[type];
-      const row = Math.floor(Math.random() * 5);
+      const pathIndex = Math.floor(Math.random() * 5);
       
       newEnemies.push({
         id: `enemy-${Date.now()}-${i}`,
         type,
-        row,
+        row: PATHS[pathIndex],
+        path: pathIndex,
         progress: Math.random() * 0.3, // 分散出生
         hp: config.hp * DIFFICULTY_CONFIG[state.difficulty].enemyHPMultiplier,
         maxHP: config.hp * DIFFICULTY_CONFIG[state.difficulty].enemyHPMultiplier,
         speed: config.speed,
-        damage: config.damage
+        damage: config.damage,
+        slowMultiplier: 1,
+        stunnedUntil: 0
       });
     }
   } else {
-    // 普通波次
+    // 普通波次（多路径随机）
     for (let i = 0; i < enemyCount; i++) {
       const type = Math.random() > 0.7 ? 'tank' : 'zombie';
       const config = ENEMY_CONFIG[type];
-      const row = Math.floor(Math.random() * 5);
+      const pathIndex = Math.floor(Math.random() * 5);
       
       newEnemies.push({
         id: `enemy-${Date.now()}-${i}`,
         type,
-        row,
+        row: PATHS[pathIndex],
+        path: pathIndex,
         progress: 0,
         hp: config.hp * DIFFICULTY_CONFIG[state.difficulty].enemyHPMultiplier,
         maxHP: config.hp * DIFFICULTY_CONFIG[state.difficulty].enemyHPMultiplier,
         speed: config.speed,
-        damage: config.damage
+        damage: config.damage,
+        slowMultiplier: 1,
+        stunnedUntil: 0
       });
     }
   }
@@ -179,11 +204,21 @@ export function updateGameState(state: GameState, deltaTime: number): GameState 
     }
   });
   
-  // 2. 敌人移动
-  newState.enemies = newState.enemies.map(enemy => ({
-    ...enemy,
-    progress: Math.min(1, enemy.progress + enemy.speed * deltaTime / 14)
-  }));
+  // 2. 敌人移动（考虑减速和眩晕）
+  newState.enemies = newState.enemies.map(enemy => {
+    // 检查是否被眩晕
+    if (now < enemy.stunnedUntil) {
+      return enemy; // 眩晕中，不移动
+    }
+    
+    // 移动（应用减速效果）
+    const effectiveSpeed = enemy.speed * enemy.slowMultiplier;
+    return {
+      ...enemy,
+      progress: Math.min(1, enemy.progress + effectiveSpeed * deltaTime / 14),
+      slowMultiplier: Math.min(1, enemy.slowMultiplier + deltaTime * 0.5) // 减速效果衰减
+    };
+  });
   
   // 3. 检查敌人到达基地
   const reachedEnemies = newState.enemies.filter(e => e.progress >= 1);
@@ -194,10 +229,23 @@ export function updateGameState(state: GameState, deltaTime: number): GameState 
   
   // 4. 单位攻击
   newState.units.forEach(unit => {
-    if (unit.attack > 0 && now - unit.lastAttackTime > unit.attackSpeed * 1000 * newState.attackSpeedMultiplier) {
+    if (now - unit.lastAttackTime > unit.attackSpeed * 1000 * newState.attackSpeedMultiplier) {
       const target = findNearestEnemy(unit, newState.enemies);
       if (target) {
-        target.hp -= unit.attack;
+        // 冰冻塔：减速效果
+        if (unit.type === 'ice' && unit.slowEffect) {
+          target.slowMultiplier = Math.min(target.slowMultiplier, unit.slowEffect);
+          target.hp -= unit.attack; // 同时造成少量伤害
+        }
+        // 电磁塔：眩晕效果
+        else if (unit.type === 'electric' && unit.stunDuration) {
+          target.stunnedUntil = now + unit.stunDuration * 1000;
+        }
+        // 普通攻击
+        else if (unit.attack > 0) {
+          target.hp -= unit.attack;
+        }
+        
         unit.lastAttackTime = now;
         
         // 吸血模式

@@ -40,7 +40,9 @@ interface GameProps {
 const UNIT_CONFIG = {
   worker: { name: '👷 农民', cost: 50 },
   archer: { name: '🏹 弓箭手', cost: 100 },
-  cannon: { name: '💣 炮塔', cost: 200 }
+  cannon: { name: '💣 炮塔', cost: 200 },
+  ice: { name: '❄️ 冰冻塔', cost: 150 },
+  electric: { name: '⚡ 电磁塔', cost: 250 }
 };
 
 export function Game({ socket, room, myPlayerId }: GameProps) {
@@ -317,23 +319,33 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
         
         {/* 敌人显示 */}
         <div className="enemies-layer">
-          {gameState.enemies.map(enemy => (
-            <div
-              key={enemy.id}
-              className="enemy"
-              style={{
-                top: `${enemy.row * 64 + 20}px`,
-                left: `${enemy.progress * 960 + 60}px`
-              }}
-            >
-              {enemy.type === 'zombie' && '🧟'}
-              {enemy.type === 'tank' && '🛡️'}
-              {enemy.type === 'boss' && '👹'}
-              <div className="enemy-hp">
-                <div className="enemy-hp-bar" style={{ width: `${(enemy.hp / enemy.maxHP) * 100}%` }} />
+          {gameState.enemies.map(enemy => {
+            const isStunned = enemy.stunnedUntil && Date.now() < enemy.stunnedUntil;
+            const isSlowed = enemy.slowMultiplier && enemy.slowMultiplier < 1;
+            
+            return (
+              <div
+                key={enemy.id}
+                className={`enemy ${isStunned ? 'enemy-stunned' : ''} ${isSlowed ? 'enemy-slowed' : ''}`}
+                style={{
+                  top: `${enemy.row * 64 + 20}px`,
+                  left: `${enemy.progress * 960 + 60}px`
+                }}
+              >
+                {enemy.type === 'zombie' && '🧟'}
+                {enemy.type === 'tank' && '🛡️'}
+                {enemy.type === 'boss' && '👹'}
+                
+                {/* 状态指示 */}
+                {isStunned && <span className="enemy-status">⚡</span>}
+                {isSlowed && !isStunned && <span className="enemy-status">❄️</span>}
+                
+                <div className="enemy-hp">
+                  <div className="enemy-hp-bar" style={{ width: `${(enemy.hp / enemy.maxHP) * 100}%` }} />
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -367,6 +379,8 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
                 {selectedUnitForUpgrade.type === 'worker' && '👷 农民'}
                 {selectedUnitForUpgrade.type === 'archer' && '🏹 弓箭手'}
                 {selectedUnitForUpgrade.type === 'cannon' && '💣 炮塔'}
+                {selectedUnitForUpgrade.type === 'ice' && '❄️ 冰冻塔'}
+                {selectedUnitForUpgrade.type === 'electric' && '⚡ 电磁塔'}
               </strong> 到 Lv.{selectedUnitForUpgrade.level + 1}
             </p>
             <div className="upgrade-stats">

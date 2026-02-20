@@ -169,6 +169,32 @@
   z-index: 10;
 }
 
+.enemy-stunned {
+  animation: stun 0.3s ease-in-out infinite;
+}
+
+@keyframes stun {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+.enemy-slowed {
+  filter: hue-rotate(180deg) brightness(0.8);
+}
+
+.enemy-status {
+  position: absolute;
+  top: -15px;
+  right: -10px;
+  font-size: 0.6em;
+  animation: statusPulse 1s ease-in-out infinite;
+}
+
+@keyframes statusPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.8; }
+}
+
 .enemy-hp {
   position: absolute;
   bottom: -5px;

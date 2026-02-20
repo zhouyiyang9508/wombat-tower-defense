@@ -36,8 +36,14 @@ export function GameBoard({ onCellClick, onUnitClick, cells }: GameBoardProps) {
     if (cell.type === 'spawn') return '☠️';
     if (cell.unit) {
       const levelStars = '⭐'.repeat(cell.unit.level || 1);
-      const emoji = cell.unit.type === 'worker' ? '👷' : 
-                    cell.unit.type === 'archer' ? '🏹' : '💣';
+      let emoji = '❓';
+      switch (cell.unit.type) {
+        case 'worker': emoji = '👷'; break;
+        case 'archer': emoji = '🏹'; break;
+        case 'cannon': emoji = '💣'; break;
+        case 'ice': emoji = '❄️'; break;
+        case 'electric': emoji = '⚡'; break;
+      }
       return (
         <div className="unit-display">
           <span className="unit-emoji">{emoji}</span>

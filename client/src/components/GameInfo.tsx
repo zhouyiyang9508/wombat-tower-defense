@@ -29,7 +29,9 @@ export function GameInfo() {
               <ul>
                 <li><strong>👷 农民 (50金币)</strong>: 每秒生产5金币，是经济的基础</li>
                 <li><strong>🏹 弓箭手 (100金币)</strong>: 远程攻击单位，射程3格</li>
+                <li><strong>❄️ 冰冻塔 (150金币)</strong>: 减速敌人50%，同时造成少量伤害</li>
                 <li><strong>💣 炮塔 (200金币)</strong>: 高伤害单位，适合对付坦克僵尸</li>
+                <li><strong>⚡ 电磁塔 (250金币)</strong>: 眩晕敌人2秒，期间无法移动</li>
               </ul>
             </div>
 
