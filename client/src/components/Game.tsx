@@ -49,6 +49,7 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
   const [pendingUnit, setPendingUnit] = useState<{ row: number; col: number; type: string } | null>(null);
   const [showBuffSelect, setShowBuffSelect] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [selectedUnitForUpgrade, setSelectedUnitForUpgrade] = useState<any | null>(null);
   const prevEnemyCountRef = useRef(0);
   const prevStatusRef = useRef<string>('');
   
@@ -177,6 +178,36 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
     setSoundEnabled(enabled);
   };
 
+  const handleUnitClick = (unit: any) => {
+    if (unit.level >= 3) {
+      alert('该单位已达到最高等级！');
+      return;
+    }
+    setSelectedUnitForUpgrade(unit);
+  };
+
+  const confirmUpgrade = () => {
+    if (!selectedUnitForUpgrade) return;
+    
+    const upgradeCost = 100 * selectedUnitForUpgrade.level;
+    
+    if (gameState && gameState.gold < upgradeCost) {
+      alert('金币不足！');
+      return;
+    }
+    
+    socket.emit('upgrade-unit', {
+      roomId: room.id,
+      unitId: selectedUnitForUpgrade.id
+    });
+    
+    setSelectedUnitForUpgrade(null);
+  };
+
+  const cancelUpgrade = () => {
+    setSelectedUnitForUpgrade(null);
+  };
+
   const cancelDeploy = () => {
     setPendingUnit(null);
   };
@@ -282,7 +313,7 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
 
       {/* 游戏区域 */}
       <div className="game-area">
-        <GameBoard cells={cells} onCellClick={handleCellClick} />
+        <GameBoard cells={cells} onCellClick={handleCellClick} onUnitClick={handleUnitClick} />
         
         {/* 敌人显示 */}
         <div className="enemies-layer">
@@ -325,6 +356,49 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
           );
         })}
       </div>
+
+      {/* 升级确认弹窗 */}
+      {selectedUnitForUpgrade && gameState && (
+        <div className="modal-overlay" onClick={cancelUpgrade}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>升级单位</h3>
+            <p>
+              升级 <strong>
+                {selectedUnitForUpgrade.type === 'worker' && '👷 农民'}
+                {selectedUnitForUpgrade.type === 'archer' && '🏹 弓箭手'}
+                {selectedUnitForUpgrade.type === 'cannon' && '💣 炮塔'}
+              </strong> 到 Lv.{selectedUnitForUpgrade.level + 1}
+            </p>
+            <div className="upgrade-stats">
+              <div className="stat-change">
+                <span>攻击力</span>
+                <strong>{Math.floor(selectedUnitForUpgrade.attack)} → {Math.floor(selectedUnitForUpgrade.attack * 1.5)}</strong>
+              </div>
+              <div className="stat-change">
+                <span>血量</span>
+                <strong>{Math.floor(selectedUnitForUpgrade.maxHP)} → {Math.floor(selectedUnitForUpgrade.maxHP * 1.5)}</strong>
+              </div>
+              {selectedUnitForUpgrade.goldPerSecond && (
+                <div className="stat-change">
+                  <span>金币产出</span>
+                  <strong>{selectedUnitForUpgrade.goldPerSecond}/s → {Math.floor(selectedUnitForUpgrade.goldPerSecond * 1.5)}/s</strong>
+                </div>
+              )}
+            </div>
+            <p className="modal-cost">
+              升级费用: <strong>💰 {100 * selectedUnitForUpgrade.level}</strong>
+            </p>
+            <div className="modal-buttons">
+              <button onClick={cancelUpgrade} className="btn-secondary">
+                取消
+              </button>
+              <button onClick={confirmUpgrade} className="btn-primary">
+                ✅ 升级
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 预购确认弹窗 */}
       {pendingUnit && (

@@ -302,3 +302,28 @@ export function selectBuff(state: GameState, buffId: string, playerId: string): 
   
   return newState;
 }
+
+export function upgradeUnit(state: GameState, unitId: string): GameState {
+  const unit = state.units.find(u => u.id === unitId);
+  if (!unit || unit.level >= 3) return state; // 最高3级
+  
+  const upgradeCost = 100 * unit.level; // 升级成本递增
+  
+  if (state.gold < upgradeCost) return state;
+  
+  // 升级单位
+  unit.level += 1;
+  unit.maxHP *= 1.5;
+  unit.hp = unit.maxHP; // 恢复满血
+  unit.attack *= 1.5;
+  
+  if (unit.goldPerSecond) {
+    unit.goldPerSecond *= 1.5;
+  }
+  
+  return {
+    ...state,
+    gold: state.gold - upgradeCost,
+    units: [...state.units]
+  };
+}

@@ -77,6 +77,22 @@
   z-index: 1;
 }
 
+.unit-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.unit-emoji {
+  font-size: 2.5em;
+}
+
+.unit-level {
+  font-size: 0.5em;
+  margin-top: -5px;
+}
+
 /* 移动端适配 */
 @media (max-width: 1024px) {
   .cell {

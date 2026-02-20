@@ -10,10 +10,11 @@ interface Cell {
 
 interface GameBoardProps {
   onCellClick: (row: number, col: number) => void;
+  onUnitClick?: (unit: any) => void;
   cells: Cell[][];
 }
 
-export function GameBoard({ onCellClick, cells }: GameBoardProps) {
+export function GameBoard({ onCellClick, onUnitClick, cells }: GameBoardProps) {
   const [hoveredCell, setHoveredCell] = useState<{row: number; col: number} | null>(null);
 
   const getCellClass = (cell: Cell) => {
@@ -34,11 +35,25 @@ export function GameBoard({ onCellClick, cells }: GameBoardProps) {
     if (cell.type === 'base') return '🏰';
     if (cell.type === 'spawn') return '☠️';
     if (cell.unit) {
-      if (cell.unit.type === 'worker') return '👷';
-      if (cell.unit.type === 'archer') return '🏹';
-      if (cell.unit.type === 'cannon') return '💣';
+      const levelStars = '⭐'.repeat(cell.unit.level || 1);
+      const emoji = cell.unit.type === 'worker' ? '👷' : 
+                    cell.unit.type === 'archer' ? '🏹' : '💣';
+      return (
+        <div className="unit-display">
+          <span className="unit-emoji">{emoji}</span>
+          {cell.unit.level > 1 && <span className="unit-level">{levelStars}</span>}
+        </div>
+      );
     }
     return '';
+  };
+
+  const handleCellClick = (cell: Cell) => {
+    if (cell.unit && onUnitClick) {
+      onUnitClick(cell.unit);
+    } else {
+      onCellClick(cell.row, cell.col);
+    }
   };
 
   return (
@@ -50,7 +65,7 @@ export function GameBoard({ onCellClick, cells }: GameBoardProps) {
               <div
                 key={`${rowIndex}-${colIndex}`}
                 className={getCellClass(cell)}
-                onClick={() => onCellClick(rowIndex, colIndex)}
+                onClick={() => handleCellClick(cell)}
                 onMouseEnter={() => setHoveredCell({row: rowIndex, col: colIndex})}
                 onMouseLeave={() => setHoveredCell(null)}
               >

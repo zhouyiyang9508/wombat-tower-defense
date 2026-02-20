@@ -10,6 +10,7 @@ import {
   spawnWave, 
   deployUnit,
   selectBuff,
+  upgradeUnit,
   Unit,
   UNIT_CONFIG
 } from './game-state';
@@ -291,6 +292,19 @@ io.on('connection', (socket) => {
     gameStates.set(roomId, newState);
     
     io.to(roomId).emit('game-state-update', newState);
+  });
+
+  // 升级单位
+  socket.on('upgrade-unit', (data: { roomId: string; unitId: string }) => {
+    const gameState = gameStates.get(data.roomId);
+    if (!gameState) return;
+    
+    const newState = upgradeUnit(gameState, data.unitId);
+    gameStates.set(data.roomId, newState);
+    
+    io.to(data.roomId).emit('game-state-update', newState);
+    
+    console.log(`[${new Date().toISOString()}] Unit ${data.unitId} upgraded in ${data.roomId}`);
   });
 
   // 获取房间列表
