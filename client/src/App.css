@@ -201,6 +201,29 @@ button:disabled {
   border: 2px dashed #bdc3c7;
 }
 
+.player-avatar {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 10px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.2);
+  overflow: hidden;
+}
+
+.player-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.player-avatar span {
+  font-size: 3em;
+}
+
 .player-card h3 {
   margin-bottom: 10px;
   font-size: 1.2em;

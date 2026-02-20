@@ -32,6 +32,7 @@ if (process.env.NODE_ENV === 'production') {
 interface Player {
   id: string;
   name: string;
+  avatar: string;
   isReady: boolean;
 }
 
@@ -62,11 +63,12 @@ io.on('connection', (socket) => {
   console.log(`[${new Date().toISOString()}] Player connected: ${socket.id}`);
 
   // 创建房间
-  socket.on('create-room', (playerName: string, callback) => {
+  socket.on('create-room', (data: { playerName: string; avatar: string }, callback) => {
     const roomId = generateRoomId();
     const player: Player = {
       id: socket.id,
-      name: playerName || `Player-${socket.id.slice(0, 4)}`,
+      name: data.playerName || `Player-${socket.id.slice(0, 4)}`,
+      avatar: data.avatar || '🐻',
       isReady: false
     };
 
@@ -86,8 +88,8 @@ io.on('connection', (socket) => {
   });
 
   // 加入房间
-  socket.on('join-room', (data: { roomId: string; playerName: string }, callback) => {
-    const { roomId, playerName } = data;
+  socket.on('join-room', (data: { roomId: string; playerName: string; avatar: string }, callback) => {
+    const { roomId, playerName, avatar } = data;
     const room = rooms.get(roomId);
 
     if (!room) {
@@ -108,6 +110,7 @@ io.on('connection', (socket) => {
     const player: Player = {
       id: socket.id,
       name: playerName || `Player-${socket.id.slice(0, 4)}`,
+      avatar: avatar || '🐨',
       isReady: false
     };
 
