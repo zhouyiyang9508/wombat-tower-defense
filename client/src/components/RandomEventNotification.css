@@ -1,0 +1,97 @@
+.random-event-notification {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-150px);
+  background: white;
+  border-radius: 15px;
+  padding: 20px 30px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  z-index: 1500;
+  min-width: 300px;
+  max-width: 500px;
+  opacity: 0;
+  transition: all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  border: 3px solid;
+}
+
+.random-event-notification.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.random-event-notification.event-positive {
+  border-color: #27ae60;
+  background: linear-gradient(135deg, #d5f4e6 0%, #a8e6cf 100%);
+}
+
+.random-event-notification.event-negative {
+  border-color: #e74c3c;
+  background: linear-gradient(135deg, #ffd7d7 0%, #ffb3b3 100%);
+}
+
+.random-event-notification.event-neutral {
+  border-color: #3498db;
+  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+}
+
+.event-content {
+  text-align: center;
+}
+
+.event-title {
+  font-size: 1.5em;
+  font-weight: bold;
+  margin-bottom: 10px;
+  color: #2c3e50;
+}
+
+.event-description {
+  font-size: 1.1em;
+  color: #34495e;
+  line-height: 1.4;
+}
+
+/* 闪烁动画（负面事件）*/
+.event-negative {
+  animation: eventShake 0.5s;
+}
+
+@keyframes eventShake {
+  0%, 100% { transform: translateX(-50%) translateY(0) rotate(0deg); }
+  25% { transform: translateX(-50%) translateY(0) rotate(-5deg); }
+  75% { transform: translateX(-50%) translateY(0) rotate(5deg); }
+}
+
+/* 闪光动画（正面事件）*/
+.event-positive::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+  animation: eventShine 1s;
+}
+
+@keyframes eventShine {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+
+@media (max-width: 768px) {
+  .random-event-notification {
+    min-width: 250px;
+    max-width: 90%;
+    padding: 15px 20px;
+  }
+  
+  .event-title {
+    font-size: 1.2em;
+  }
+  
+  .event-description {
+    font-size: 1em;
+  }
+}

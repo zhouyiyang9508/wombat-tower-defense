@@ -3,6 +3,7 @@ import { Socket } from 'socket.io-client';
 import { GameBoard } from './GameBoard';
 import { BuffSelect } from './BuffSelect';
 import { GameInfo } from './GameInfo';
+import { RandomEventNotification } from './RandomEventNotification';
 import { soundManager } from '../utils/sound';
 import { BUFFS } from '../types/buffs';
 import { UNIT_DATA, UNIT_CATEGORIES } from '../data/units';
@@ -12,6 +13,14 @@ interface Player {
   id: string;
   name: string;
   avatar: string;
+}
+
+interface RandomEvent {
+  id: string;
+  title: string;
+  description: string;
+  type: 'positive' | 'negative' | 'neutral';
+  waveTriggered: number;
 }
 
 interface GameState {
@@ -25,11 +34,14 @@ interface GameState {
   units: any[];
   enemies: any[];
   buffs: any[];
+  randomEvents: RandomEvent[];
   status: 'waiting' | 'playing' | 'waveEnd' | 'stageEnd' | 'victory' | 'defeat';
   difficulty: string;
   goldMultiplier: number;
   costMultiplier: number;
   hpMultiplier: number;
+  damageMultiplier: number;
+  rangeBonus: number;
 }
 
 interface GameProps {
@@ -48,7 +60,8 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [selectedUnitForUpgrade, setSelectedUnitForUpgrade] = useState<any | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('economy');
-  const [showUnitMenu, setShowUnitMenu] = useState(false);
+  const [currentEvent, setCurrentEvent] = useState<RandomEvent | null>(null);
+  const prevEventsCountRef = useRef(0);
   const prevEnemyCountRef = useRef(0);
   const prevStatusRef = useRef<string>('');
   
@@ -73,7 +86,7 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
     const handleGameStateUpdate = (newState: GameState) => {
       console.log('Game state updated:', newState);
       
-      // 音效处理
+      // 音效处理 + 随机事件检测
       if (gameState) {
         // 检测Boss出现
         if (newState.enemies.some(e => e.type === 'boss') && 
@@ -85,6 +98,13 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
         if (newState.enemies.length < prevEnemyCountRef.current) {
           soundManager.enemyDeath();
         }
+        
+        // 检测随机事件
+        if (newState.randomEvents && newState.randomEvents.length > prevEventsCountRef.current) {
+          const latestEvent = newState.randomEvents[newState.randomEvents.length - 1];
+          setCurrentEvent(latestEvent);
+        }
+        prevEventsCountRef.current = newState.randomEvents?.length || 0;
         
         // 检测状态变化
         if (newState.status !== prevStatusRef.current) {
@@ -136,7 +156,6 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
 
   const handleCellClick = (row: number, col: number) => {
     if (!selectedUnit) {
-      setShowUnitMenu(true);
       return;
     }
     
@@ -229,12 +248,6 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
     socket.emit('select-buff', { roomId: room.id, buffId: buff.id });
     setShowBuffSelect(false);
   };
-
-  const units = [
-    { type: 'worker', ...UNIT_CONFIG.worker },
-    { type: 'archer', ...UNIT_CONFIG.archer },
-    { type: 'cannon', ...UNIT_CONFIG.cannon }
-  ];
 
   return (
     <div className="game">
@@ -543,6 +556,12 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
           </div>
         </div>
       )}
+      
+      {/* 随机事件通知 */}
+      <RandomEventNotification 
+        event={currentEvent} 
+        onDismiss={() => setCurrentEvent(null)} 
+      />
     </div>
   );
 }

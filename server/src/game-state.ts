@@ -64,6 +64,14 @@ export interface Buff {
   selectedBy: string; // 选择该Buff的玩家ID
 }
 
+export interface RandomEvent {
+  id: string;
+  title: string;
+  description: string;
+  type: 'positive' | 'negative' | 'neutral';
+  waveTriggered: number;
+}
+
 export interface GameState {
   roomId: string;
   gold: number;
@@ -76,6 +84,7 @@ export interface GameState {
   units: Unit[];
   enemies: Enemy[];
   buffs: Buff[];
+  randomEvents: RandomEvent[];
   status: 'waiting' | 'playing' | 'waveEnd' | 'stageEnd' | 'victory' | 'defeat';
   difficulty: 'easy' | 'normal' | 'hard';
   // Buff效果倍数
@@ -83,6 +92,12 @@ export interface GameState {
   costMultiplier: number;
   hpMultiplier: number;
   attackSpeedMultiplier: number;
+  damageMultiplier: number;
+  rangeBonus: number;
+  enemyHPMultiplier: number;
+  sellRefund: number;
+  baseRegen: number;
+  commanderBonus: number;
   vampireMode: boolean;
   timeWarpMode: boolean;
 }
@@ -144,12 +159,19 @@ export function createGameState(roomId: string, difficulty: 'easy' | 'normal' | 
     units: [],
     enemies: [],
     buffs: [],
+    randomEvents: [],
     status: 'waiting',
     difficulty,
     goldMultiplier: config.goldMultiplier,
     costMultiplier: 1,
     hpMultiplier: 1,
     attackSpeedMultiplier: 1,
+    damageMultiplier: 1,
+    rangeBonus: 0,
+    enemyHPMultiplier: config.enemyHPMultiplier,
+    sellRefund: 0.5,
+    baseRegen: 0,
+    commanderBonus: 1,
     vampireMode: false,
     timeWarpMode: false
   };
@@ -164,13 +186,95 @@ const PATHS = [
   4  // 下路
 ];
 
+// 随机事件池
+const RANDOM_EVENTS = [
+  // 正面事件
+  { id: 'gold-rush', title: '💎 淘金热', description: '获得 300 金币！', type: 'positive' as const, effect: (state: GameState) => ({ ...state, gold: state.gold + 300 }) },
+  { id: 'lucky-day', title: '🍀 幸运日', description: '获得 500 金币！', type: 'positive' as const, effect: (state: GameState) => ({ ...state, gold: state.gold + 500 }) },
+  { id: 'repair-kit', title: '🔧 修理包', description: '基地恢复 20 血量', type: 'positive' as const, effect: (state: GameState) => ({ ...state, baseHP: Math.min(state.maxBaseHP, state.baseHP + 20) }) },
+  { id: 'slow-wave', title: '🐌 迟钝之雾', description: '本波敌人速度 -30%', type: 'positive' as const, effect: (state: GameState) => state }, // 在spawnWave中处理
+  { id: 'weak-wave', title: '🩹 虚弱诅咒', description: '本波敌人血量 -20%', type: 'positive' as const, effect: (state: GameState) => state }, // 在spawnWave中处理
+  
+  // 负面事件
+  { id: 'tax', title: '💸 税收', description: '失去 200 金币', type: 'negative' as const, effect: (state: GameState) => ({ ...state, gold: Math.max(0, state.gold - 200) }) },
+  { id: 'earthquake', title: '🌋 地震', description: '所有塔受到 10 点伤害', type: 'negative' as const, effect: (state: GameState) => ({ ...state, units: state.units.map(u => ({ ...u, hp: Math.max(1, u.hp - 10) })) }) },
+  { id: 'raid', title: '⚔️ 突袭', description: '基地受到 15 点伤害', type: 'negative' as const, effect: (state: GameState) => ({ ...state, baseHP: Math.max(1, state.baseHP - 15) }) },
+  { id: 'strong-wave', title: '💪 强化增幅', description: '本波敌人血量 +30%', type: 'negative' as const, effect: (state: GameState) => state }, // 在spawnWave中处理
+  { id: 'fast-wave', title: '⚡ 速度爆发', description: '本波敌人速度 +40%', type: 'negative' as const, effect: (state: GameState) => state }, // 在spawnWave中处理
+  
+  // 中性事件
+  { id: 'merchant', title: '🛒 商人', description: '塔成本 -15%（本波）', type: 'neutral' as const, effect: (state: GameState) => ({ ...state, costMultiplier: state.costMultiplier * 0.85 }) },
+  { id: 'inspire', title: '📣 鼓舞', description: '攻击力 +20%（本波）', type: 'neutral' as const, effect: (state: GameState) => ({ ...state, damageMultiplier: state.damageMultiplier * 1.2 }) },
+];
+
+// 触发随机事件
+function triggerRandomEvent(state: GameState): GameState {
+  // 每 3-5 波触发一次随机事件（25% 概率）
+  if (state.wave % 3 !== 0 || Math.random() > 0.25) {
+    return state;
+  }
+  
+  // 随机选择一个事件
+  const event = RANDOM_EVENTS[Math.floor(Math.random() * RANDOM_EVENTS.length)];
+  
+  // 应用事件效果
+  let newState = event.effect(state);
+  
+  // 记录事件
+  newState.randomEvents = [
+    ...newState.randomEvents,
+    {
+      id: event.id,
+      title: event.title,
+      description: event.description,
+      type: event.type,
+      waveTriggered: state.wave
+    }
+  ];
+  
+  return newState;
+}
+
+// 获取当前波次的随机事件调整
+function getWaveEventModifiers(state: GameState): { hpMultiplier: number; speedMultiplier: number } {
+  const currentEvent = state.randomEvents.find(e => e.waveTriggered === state.wave);
+  
+  let hpMultiplier = 1;
+  let speedMultiplier = 1;
+  
+  if (currentEvent) {
+    switch (currentEvent.id) {
+      case 'slow-wave':
+        speedMultiplier = 0.7;
+        break;
+      case 'weak-wave':
+        hpMultiplier = 0.8;
+        break;
+      case 'strong-wave':
+        hpMultiplier = 1.3;
+        break;
+      case 'fast-wave':
+        speedMultiplier = 1.4;
+        break;
+    }
+  }
+  
+  return { hpMultiplier, speedMultiplier };
+}
+
 export function spawnWave(state: GameState): GameState {
+  // 先触发随机事件
+  let newState = triggerRandomEvent(state);
+  
+  // 获取事件修正
+  const eventMods = getWaveEventModifiers(newState);
+  
   const newEnemies: Enemy[] = [];
-  const baseCount = 5 + state.wave * 2;
-  const enemyCount = Math.floor(baseCount * (state.stage * 0.5 + 0.5));
+  const baseCount = 5 + newState.wave * 2;
+  const enemyCount = Math.floor(baseCount * (newState.stage * 0.5 + 0.5));
   
   // Boss关（每个stage的最后一波）
-  const isBossWave = state.wave === state.totalWaves;
+  const isBossWave = newState.wave === newState.totalWaves;
   
   if (isBossWave) {
     // Boss + 小怪
@@ -181,9 +285,9 @@ export function spawnWave(state: GameState): GameState {
       row: PATHS[bossPath],
       path: bossPath,
       progress: 0,
-      hp: ENEMY_CONFIG.boss.hp * state.stage,
-      maxHP: ENEMY_CONFIG.boss.hp * state.stage,
-      speed: ENEMY_CONFIG.boss.speed,
+      hp: ENEMY_CONFIG.boss.hp * newState.stage * newState.enemyHPMultiplier * eventMods.hpMultiplier,
+      maxHP: ENEMY_CONFIG.boss.hp * newState.stage * newState.enemyHPMultiplier * eventMods.hpMultiplier,
+      speed: ENEMY_CONFIG.boss.speed * eventMods.speedMultiplier,
       damage: ENEMY_CONFIG.boss.damage,
       slowMultiplier: 1,
       stunnedUntil: 0
@@ -201,9 +305,9 @@ export function spawnWave(state: GameState): GameState {
         row: PATHS[pathIndex],
         path: pathIndex,
         progress: Math.random() * 0.3, // 分散出生
-        hp: config.hp * DIFFICULTY_CONFIG[state.difficulty].enemyHPMultiplier,
-        maxHP: config.hp * DIFFICULTY_CONFIG[state.difficulty].enemyHPMultiplier,
-        speed: config.speed,
+        hp: config.hp * newState.enemyHPMultiplier * eventMods.hpMultiplier,
+        maxHP: config.hp * newState.enemyHPMultiplier * eventMods.hpMultiplier,
+        speed: config.speed * eventMods.speedMultiplier,
         damage: config.damage,
         slowMultiplier: 1,
         stunnedUntil: 0
@@ -222,9 +326,9 @@ export function spawnWave(state: GameState): GameState {
         row: PATHS[pathIndex],
         path: pathIndex,
         progress: 0,
-        hp: config.hp * DIFFICULTY_CONFIG[state.difficulty].enemyHPMultiplier,
-        maxHP: config.hp * DIFFICULTY_CONFIG[state.difficulty].enemyHPMultiplier,
-        speed: config.speed,
+        hp: config.hp * newState.enemyHPMultiplier * eventMods.hpMultiplier,
+        maxHP: config.hp * newState.enemyHPMultiplier * eventMods.hpMultiplier,
+        speed: config.speed * eventMods.speedMultiplier,
         damage: config.damage,
         slowMultiplier: 1,
         stunnedUntil: 0
@@ -233,8 +337,8 @@ export function spawnWave(state: GameState): GameState {
   }
   
   return {
-    ...state,
-    enemies: [...state.enemies, ...newEnemies],
+    ...newState,
+    enemies: [...newState.enemies, ...newEnemies],
     status: 'playing'
   };
 }
@@ -245,7 +349,12 @@ export function updateGameState(state: GameState, deltaTime: number): GameState 
   let newState = { ...state };
   const now = Date.now();
   
-  // 0. 应用光环和组合加成
+  // 0. 基地回血（如果有medic buff）
+  if (newState.baseRegen > 0) {
+    newState.baseHP = Math.min(newState.maxBaseHP, newState.baseHP + newState.baseRegen * deltaTime);
+  }
+  
+  // 0.1 应用光环和组合加成
   newState.units = applyAuraEffects(newState.units);
   
   // 1. 生产金币（农民和金矿）
@@ -257,9 +366,9 @@ export function updateGameState(state: GameState, deltaTime: number): GameState 
   
   // 1.5 治疗塔治疗周围单位
   newState.units.forEach(healer => {
-    if (healer.healPerSecond) {
+    if (healer.healPerSecond && healer.healPerSecond > 0) {
       newState.units.forEach(target => {
-        if (target.id !== healer.id) {
+        if (target.id !== healer.id && healer.healPerSecond) {
           const dist = Math.abs(target.row - healer.row) + Math.abs(target.col - healer.col);
           if (dist <= healer.range && target.hp < target.maxHP) {
             target.hp = Math.min(target.maxHP, target.hp + healer.healPerSecond * deltaTime);
@@ -343,19 +452,21 @@ export function updateGameState(state: GameState, deltaTime: number): GameState 
     if (now - unit.lastAttackTime > unit.attackSpeed * 1000 * newState.attackSpeedMultiplier) {
       const config = UNIT_CONFIG[unit.type];
       
+      const effectiveRange = unit.range + newState.rangeBonus;
+      
       // 激光塔：穿透攻击所有敌人在一条线上
       if (config.penetrate) {
         const targets = newState.enemies.filter(e => 
           Math.abs(e.row - unit.row) <= 1 && e.progress * 14 >= unit.col
         );
         targets.forEach(t => {
-          t.hp -= unit.attack;
+          t.hp -= unit.attack * newState.damageMultiplier;
         });
         unit.lastAttackTime = now;
       }
       // 胶水塔：黏住效果
       else if (unit.type === 'glue' && config.glueDuration) {
-        const target = findNearestEnemy(unit, newState.enemies);
+        const target = findNearestEnemy(unit, newState.enemies, effectiveRange);
         if (target) {
           target.slowMultiplier = 0.3; // 减速70%
           target.stunnedUntil = now + config.glueDuration * 1000;
@@ -364,27 +475,27 @@ export function updateGameState(state: GameState, deltaTime: number): GameState 
       }
       // 毒塔：中毒持续伤害
       else if (unit.type === 'poison' && config.poisonDPS) {
-        const target = findNearestEnemy(unit, newState.enemies);
+        const target = findNearestEnemy(unit, newState.enemies, effectiveRange);
         if (target) {
-          target.hp -= unit.attack;
+          target.hp -= unit.attack * newState.damageMultiplier;
           // 标记中毒（在敌人数据结构中）
-          (target as any).poisonDamage = config.poisonDPS;
+          (target as any).poisonDamage = config.poisonDPS * newState.damageMultiplier;
           (target as any).poisonUntil = now + 3000; // 持续3秒
           unit.lastAttackTime = now;
         }
       }
       // 冰冻塔
       else if (unit.type === 'ice' && unit.slowEffect) {
-        const target = findNearestEnemy(unit, newState.enemies);
+        const target = findNearestEnemy(unit, newState.enemies, effectiveRange);
         if (target) {
           target.slowMultiplier = Math.min(target.slowMultiplier, unit.slowEffect);
-          target.hp -= unit.attack;
+          target.hp -= unit.attack * newState.damageMultiplier;
           unit.lastAttackTime = now;
         }
       }
       // 电磁塔
       else if (unit.type === 'electric' && unit.stunDuration) {
-        const target = findNearestEnemy(unit, newState.enemies);
+        const target = findNearestEnemy(unit, newState.enemies, effectiveRange);
         if (target) {
           target.stunnedUntil = now + unit.stunDuration * 1000;
           unit.lastAttackTime = now;
@@ -392,9 +503,9 @@ export function updateGameState(state: GameState, deltaTime: number): GameState 
       }
       // 普通攻击
       else if (unit.attack > 0) {
-        const target = findNearestEnemy(unit, newState.enemies);
+        const target = findNearestEnemy(unit, newState.enemies, effectiveRange);
         if (target) {
-          target.hp -= unit.attack;
+          target.hp -= unit.attack * newState.damageMultiplier;
           unit.lastAttackTime = now;
           
           if (newState.vampireMode && target.hp <= 0) {
@@ -440,11 +551,12 @@ export function updateGameState(state: GameState, deltaTime: number): GameState 
   return newState;
 }
 
-function findNearestEnemy(unit: Unit, enemies: Enemy[]): Enemy | null {
+function findNearestEnemy(unit: Unit, enemies: Enemy[], effectiveRange?: number): Enemy | null {
+  const range = effectiveRange !== undefined ? effectiveRange : unit.range;
   const nearbyEnemies = enemies.filter(e => {
     const rowDist = Math.abs(e.row - unit.row);
     const colDist = Math.abs(e.progress * 14 - unit.col);
-    return rowDist <= 1 && colDist <= unit.range;
+    return rowDist <= 1 && colDist <= range;
   });
   
   if (nearbyEnemies.length === 0) return null;
@@ -482,6 +594,7 @@ export function selectBuff(state: GameState, buffId: string, playerId: string): 
   
   // 应用Buff效果
   switch (buffId) {
+    // 标准 Buff
     case 'golden-age':
       newState.goldMultiplier *= 1.5;
       break;
@@ -492,7 +605,7 @@ export function selectBuff(state: GameState, buffId: string, playerId: string): 
       newState.hpMultiplier *= 1.3;
       break;
     case 'rapid-fire':
-      newState.attackSpeedMultiplier *= 0.75; // 更快攻击（数值越小越快）
+      newState.attackSpeedMultiplier /= 1.25;
       break;
     case 'vampire':
       newState.vampireMode = true;
@@ -500,6 +613,62 @@ export function selectBuff(state: GameState, buffId: string, playerId: string): 
     case 'time-warp':
       newState.timeWarpMode = true;
       break;
+    
+    // 新增标准 Buff
+    case 'engineer':
+      newState.gold += 500;
+      break;
+    case 'artillery':
+      newState.damageMultiplier *= 1.4;
+      break;
+    case 'sniper-nest':
+      newState.rangeBonus += 1;
+      break;
+    case 'recycler':
+      newState.sellRefund = 0.8;
+      break;
+    case 'medic':
+      newState.baseRegen += 1;
+      break;
+    case 'commander':
+      newState.commanderBonus = 1.1;
+      break;
+    
+    // 赌博 Buff
+    case 'all-in':
+      newState.damageMultiplier *= 2.0;
+      newState.maxBaseHP = Math.floor(newState.maxBaseHP * 0.7);
+      newState.baseHP = Math.min(newState.baseHP, newState.maxBaseHP);
+      break;
+    case 'berserk':
+      newState.attackSpeedMultiplier /= 1.8;
+      newState.costMultiplier *= 1.5;
+      break;
+    case 'greed':
+      newState.goldMultiplier *= 3.0;
+      newState.enemyHPMultiplier *= 1.3;
+      break;
+    
+    // 诅咒 Buff
+    case 'curse-poverty':
+      newState.gold += 800;
+      newState.goldMultiplier *= 0.6;
+      break;
+    case 'curse-fragile':
+      newState.gold += 600;
+      newState.hpMultiplier *= 0.75;
+      break;
+    case 'curse-slow':
+      newState.gold += 700;
+      newState.attackSpeedMultiplier *= 1.3;
+      break;
+  }
+  
+  // 指挥官buff需要在最后应用（影响其他所有加成）
+  if (newState.commanderBonus > 1) {
+    newState.goldMultiplier = 1 + (newState.goldMultiplier - 1) * newState.commanderBonus;
+    newState.damageMultiplier = 1 + (newState.damageMultiplier - 1) * newState.commanderBonus;
+    newState.hpMultiplier = 1 + (newState.hpMultiplier - 1) * newState.commanderBonus;
   }
   
   // 进入下一关

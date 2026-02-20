@@ -59,6 +59,38 @@
   text-align: center;
   cursor: pointer;
   transition: all 0.3s;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 稀有度边框颜色 */
+.buff-card.rarity-common {
+  border-color: #95a5a6;
+}
+
+.buff-card.rarity-rare {
+  border-color: #3498db;
+  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+}
+
+.buff-card.rarity-legendary {
+  border-color: #f39c12;
+  background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
+  animation: legendaryGlow 2s infinite;
+}
+
+@keyframes legendaryGlow {
+  0%, 100% { box-shadow: 0 0 20px rgba(243, 156, 18, 0.5); }
+  50% { box-shadow: 0 0 30px rgba(243, 156, 18, 0.8); }
+}
+
+/* 类别背景 */
+.buff-card.category-gamble {
+  background: linear-gradient(135deg, #ffeaa7 0%, #fdcb6e 100%);
+}
+
+.buff-card.category-curse {
+  background: linear-gradient(135deg, #dfe6e9 0%, #b2bec3 100%);
 }
 
 .buff-card:hover {

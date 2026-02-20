@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Buff } from '../types/buffs';
+import type { Buff } from '../types/buffs';
 import './BuffSelect.css';
 
 interface BuffSelectProps {
@@ -30,12 +30,22 @@ export function BuffSelect({ buffs, onSelect }: BuffSelectProps) {
           {buffs.map(buff => (
             <div
               key={buff.id}
-              className={`buff-card ${selectedBuff?.id === buff.id ? 'selected' : ''}`}
+              className={`buff-card rarity-${buff.rarity} category-${buff.category} ${selectedBuff?.id === buff.id ? 'selected' : ''}`}
               onClick={() => handleSelect(buff)}
             >
               <div className="buff-emoji">{buff.emoji}</div>
               <div className="buff-name">{buff.name}</div>
-              <div className="buff-category">{buff.category}</div>
+              <div className="buff-category">
+                {buff.category === 'gamble' && '⚠️ 赌博'}
+                {buff.category === 'curse' && '☠️ 诅咒'}
+                {buff.category === 'economic' && '💰 经济'}
+                {buff.category === 'defense' && '🛡️ 防御'}
+                {buff.category === 'special' && '✨ 特殊'}
+                {' · '}
+                {buff.rarity === 'common' && '普通'}
+                {buff.rarity === 'rare' && '稀有'}
+                {buff.rarity === 'legendary' && '传说'}
+              </div>
               <div className="buff-description">{buff.description}</div>
             </div>
           ))}
