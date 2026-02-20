@@ -166,6 +166,9 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
           <div className="stat">
             <span className="stat-icon">💰</span>
             <span className="stat-value">{Math.floor(gameState.gold)}</span>
+            {gameState.goldMultiplier > 1 && (
+              <span className="stat-multiplier">×{gameState.goldMultiplier.toFixed(1)}</span>
+            )}
           </div>
           <div className="stat">
             <span className="stat-icon">❤️</span>
@@ -184,6 +187,20 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
             <span className="stat-value">{gameState.enemies.length} 敌人</span>
           </div>
         </div>
+        
+        {/* Buff列表 */}
+        {gameState.buffs.length > 0 && (
+          <div className="active-buffs">
+            {gameState.buffs.map((buff, index) => {
+              const buffData = BUFFS.find(b => b.id === buff.id);
+              return buffData ? (
+                <div key={index} className="active-buff" title={buffData.description}>
+                  <span className="buff-emoji">{buffData.emoji}</span>
+                </div>
+              ) : null;
+            })}
+          </div>
+        )}
         
         <div className="players-mini">
           {room.players.map((player: Player) => (
@@ -288,15 +305,41 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
         <BuffSelect buffs={BUFFS.slice(0, 3)} onSelect={handleBuffSelect} />
       )}
 
+      {/* 波次结束提示 */}
+      {gameState.status === 'waveEnd' && (
+        <div className="wave-end-banner">
+          <div className="wave-end-content">
+            <h3>✅ 波次 {gameState.wave - 1} 完成！</h3>
+            <p>准备好迎接下一波敌人</p>
+          </div>
+        </div>
+      )}
+
       {/* 游戏结束 */}
       {gameState.status === 'victory' && (
         <div className="modal-overlay">
           <div className="modal victory-modal">
-            <h2>🎉 胜利！</h2>
-            <p>你们成功守住了基地！</p>
-            <p className="victory-stats">
-              关卡：{gameState.stage} | 难度：{gameState.difficulty}
-            </p>
+            <div className="victory-animation">🎉</div>
+            <h2>胜利！</h2>
+            <p className="victory-message">你们成功守住了基地！</p>
+            <div className="victory-stats">
+              <div className="stat-row">
+                <span>完成关卡</span>
+                <strong>{gameState.stage}/{gameState.totalStages}</strong>
+              </div>
+              <div className="stat-row">
+                <span>难度</span>
+                <strong>{gameState.difficulty.toUpperCase()}</strong>
+              </div>
+              <div className="stat-row">
+                <span>剩余血量</span>
+                <strong>{Math.floor(gameState.baseHP)}</strong>
+              </div>
+              <div className="stat-row">
+                <span>获得Buff</span>
+                <strong>{gameState.buffs.length}个</strong>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -304,11 +347,26 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
       {gameState.status === 'defeat' && (
         <div className="modal-overlay">
           <div className="modal defeat-modal">
-            <h2>💀 失败</h2>
-            <p>基地被摧毁了...</p>
-            <p className="defeat-stats">
-              存活关卡：{gameState.stage} | 波次：{gameState.wave}
-            </p>
+            <div className="defeat-animation">💀</div>
+            <h2>失败</h2>
+            <p className="defeat-message">基地被摧毁了...</p>
+            <div className="defeat-stats">
+              <div className="stat-row">
+                <span>存活关卡</span>
+                <strong>{gameState.stage}</strong>
+              </div>
+              <div className="stat-row">
+                <span>波次</span>
+                <strong>{gameState.wave}/{gameState.totalWaves}</strong>
+              </div>
+              <div className="stat-row">
+                <span>难度</span>
+                <strong>{gameState.difficulty.toUpperCase()}</strong>
+              </div>
+            </div>
+            <button onClick={() => window.location.reload()} className="btn-retry">
+              重新开始
+            </button>
           </div>
         </div>
       )}
