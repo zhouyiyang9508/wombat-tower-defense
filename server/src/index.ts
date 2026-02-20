@@ -232,19 +232,20 @@ io.on('connection', (socket) => {
     const gameState = gameStates.get(data.roomId);
     if (!gameState) return;
     
+    const config = UNIT_CONFIG[data.unit.type!];
     const fullUnit: Unit = {
       id: data.unit.id || `unit-${Date.now()}`,
       type: data.unit.type!,
       row: data.unit.row!,
       col: data.unit.col!,
       level: 1,
-      hp: UNIT_CONFIG[data.unit.type!].hp,
-      maxHP: UNIT_CONFIG[data.unit.type!].hp,
-      attack: UNIT_CONFIG[data.unit.type!].attack,
-      attackSpeed: UNIT_CONFIG[data.unit.type!].attackSpeed,
-      range: UNIT_CONFIG[data.unit.type!].range,
+      hp: config.hp,
+      maxHP: config.hp,
+      attack: config.attack,
+      attackSpeed: config.attackSpeed,
+      range: config.range,
       lastAttackTime: 0,
-      goldPerSecond: UNIT_CONFIG[data.unit.type!].goldPerSecond,
+      goldPerSecond: 'goldPerSecond' in config ? config.goldPerSecond : undefined,
       ownerId: socket.id
     };
     
