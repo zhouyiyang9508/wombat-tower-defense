@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Socket } from 'socket.io-client';
 import { GameBoard } from './GameBoard';
 import { BuffSelect } from './BuffSelect';
+import { GameInfo } from './GameInfo';
 import { BUFFS } from '../types/buffs';
 import './Game.css';
 
@@ -160,6 +161,9 @@ export function Game({ socket, room, myPlayerId }: GameProps) {
 
   return (
     <div className="game">
+      {/* 帮助按钮 */}
+      <GameInfo />
+      
       {/* 顶部状态栏 */}
       <div className="game-header">
         <div className="game-stats">
